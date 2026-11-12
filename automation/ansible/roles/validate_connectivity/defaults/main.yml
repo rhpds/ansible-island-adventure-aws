@@ -1,0 +1,9 @@
+---
+aia_readiness_enabled: true
+aia_readiness_enforce_gate: true
+aia_readiness_require_all_addresses: true
+aia_readiness_connect_timeout: 3
+aia_readiness_job_timeout: 300
+aia_readiness_publish_user_info: false
+aia_readiness_report_dir: "{{ (aia_kubeconfig | dirname) if aia_kubeconfig is defined else (output_dir | default(playbook_dir)) }}"
+aia_readiness_namespace: "{{ instructor.lab_ns | default(instructor.name ~ '-lab') }}"

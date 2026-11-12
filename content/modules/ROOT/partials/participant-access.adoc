@@ -1,0 +1,17 @@
+*Your personal service username:* `{keycloak_username}`
+
+*Your provisioned lab password:* `{password}`
+
+Use your CTFd player account during gameplay. Gitea, AAP, and Dev Spaces are shared services with your own personal account.
+
+[cols="2,1",options="header"]
+|===
+| Service | Username
+
+| Your CTFd — playing challenges | `{ctfd_student_username}`
+| Gitea | `{gitea_username}`
+| AAP | `{aap_username}`
+| Dev Spaces / OpenShift browser login | `{keycloak_username}`
+|===
+
+Use the provisioned lab password for these accounts. Instructor administration is covered after gameplay.

@@ -1,0 +1,22 @@
+---
+# Catalog provisioning initializes access only. Content is loaded after deployment.
+- name: "{{ instructor.name }} — Wait for CTFd service"
+  ansible.builtin.include_tasks: ctfd_ready.yml
+
+- name: "{{ instructor.name }} — Initialize CTFd settings and accounts"
+  ansible.builtin.include_tasks: ctfd_users.yml
+
+- name: "{{ instructor.name }} — Publish CTFd info"
+  agnosticd.core.agnosticd_user_info:
+    msg: |
+      CTFd (Ansible Island CTF Platform):
+        URL:          https://island-{{ instructor.ctfd_ns }}.{{ cluster_apps_domain }}
+        Admin:        {{ ctfd_admin_username }} / {{ ctfd_admin_password }}
+        Student:      {{ student_name }} / {{ common_password }}
+        Challenges:   Load after deployment with configure_ctfd.yml
+    data:
+      ctfd_url: "https://island-{{ instructor.ctfd_ns }}.{{ cluster_apps_domain }}"
+      ctfd_admin_username: "{{ ctfd_admin_username }}"
+      ctfd_admin_password: "{{ ctfd_admin_password }}"
+      ctfd_student_username: "{{ student_name }}"
+      ctfd_student_password: "{{ common_password }}"

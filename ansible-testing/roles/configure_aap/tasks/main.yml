@@ -1,0 +1,9 @@
+---
+# Seed AAP with per-instructor inventory and machine credentials.
+
+- name: Configure AAP resources for each instructor
+  ansible.builtin.include_tasks: per_instructor.yml
+  loop: "{{ instructors }}"
+  loop_control:
+    loop_var: _inst
+    label: "{{ _inst.name }}"

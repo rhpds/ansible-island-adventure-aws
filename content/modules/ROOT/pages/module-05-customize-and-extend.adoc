@@ -1,0 +1,212 @@
+= Customize and Extend
+:navtitle: 5. Customize and Extend
+
+Allow *20 minutes* for challenge editing, applying a content update, and verifying progress preservation. The organizer provisioning workflow later in this module is reference material; catalog ordering and post-deploy preparation take place before learners arrive, outside the training clock.
+
+== Modify Challenge Content
+
+Challenge definitions live in YAML variable files.
+You can customize them for any customer or partner engagement without modifying the playbook or roles.
+
+=== Review the Challenge Structure
+
+. Continue in your `aia-instructor` workspace from Module 4. The survival-kit workspace from Module 3 can remain available alongside it with separate persistent storage. Use the instructor repository for event administration.
+. In `/projects/aia-instructor`, open `roles/ctfd/vars/challenges.yml`.
+
+Each challenge is defined as a YAML dictionary with these fields:
+
+[source,yaml]
+----
+- name: "Challenge Name"
+  description: >-
+    Markdown-formatted description shown to participants.
+  value: 50                  # Points awarded
+  category: "At the Beach"  # Challenge category
+  state: visible             # visible or hidden
+  prerequisites:             # Challenges that must be completed first
+    - "Previous Challenge"
+  flags:
+    - content: "{{ ctfd_flags.flag_name }}"  # Reference to vault-encrypted flag
+      data: case_insensitive
+  hints:
+    - content: "Hint text shown to participants"
+      cost: 5                # Point cost to reveal the hint
+----
+
+=== Add or Modify a Challenge
+
+Let's modify an existing challenge to see how the process works.
+
+. Open `roles/ctfd/vars/challenges.yml` in your Dev Spaces editor.
+. Find the "Ansible Docs" challenge in the *Warm Up* category.
+. Change the `value` from `10` to `15`:
++
+[source,yaml]
+----
+  - name: Ansible Docs
+    description: What is the URL to find documentation about Ansible?
+    value: 15  # Changed from 10
+    category: Warm Up
+    state: visible
+----
++
+. Optionally, add a new challenge to the Warm Up category:
++
+[source,yaml]
+----
+  - name: "Red Hat Learning"
+    description: >-
+      What is the URL for Red Hat's free interactive learning platform
+      where you can practice Ansible in a browser?
+    value: 10
+    category: Warm Up
+    state: visible
+    prerequisites:
+      - Ansible Docs
+    flags:
+      - content: "{{ ctfd_flags.red_hat_learning }}"
+        type: regex
+        data: case_insensitive
+    hints:
+      - content: >-
+          Search for "Red Hat interactive labs" or "Red Hat learning".
+        cost: 2
+----
+
+[NOTE]
+====
+For new challenges that reference new flags, you must also add the corresponding flag value to `roles/ctfd/vars/flags.yml` (vault-encrypted).
+Use `ansible-vault edit roles/ctfd/vars/flags.yml --vault-password-file .vault-password` to add new flag entries.
+====
+
+=== Configure Difficulty Tiers
+
+Challenges are organized into difficulty tiers through their `category` and `value` fields. To adjust difficulty tiers for your audience:
+
+. *Reassign categories* — Move a challenge between categories (e.g., from "Treasure Hunt" to "At the Beach") to change its perceived difficulty tier.
+. *Adjust point values* — Higher values signal harder challenges. Use 5–15 for beginner, 25–50 for intermediate, and 75–100 for advanced.
+. *Control prerequisites* — Add or remove `prerequisites` to gate advanced challenges behind easier ones, or open them for experienced audiences.
+. *Toggle visibility* — Set `state: hidden` to remove challenges that don't fit the audience, without deleting them.
+
+For advanced challenges, open `roles/ctfd/vars/challenges_advanced.yml`, which defines `ctfd_challenges_advanced`. These verifier-based challenges represent the highest difficulty tier and require participants to write and run real automation against the managed node.
+
+=== Review Advanced Challenges
+
+The `ctfd_challenges_advanced` section defines challenges that use a *verifier service* — a sidecar container that SSH-es into the managed node to validate that the participant's playbook actually achieved the desired state.
+
+Advanced challenges follow the same YAML structure but require participants to call a verification API endpoint after completing the task:
+
+[source,bash,subs="attributes"]
+----
+curl -X POST https://{verifier_url}/validate \
+  -H 'Content-Type: application/json' \
+  -d '{"token": "YOUR_TOKEN", "challenge": "deploy-file"}'
+----
+
+== Apply Changes Deliberately
+
+Choose between updating challenge content and resetting your personal board before a new session.
+
+=== Update Challenge Content
+
+`update-challenges.yml` uses your existing OpenShift login and local vault password. It discovers your own board, then updates content inside its CTFd pod. No additional deployment inputs are needed.
+
+Preview the changes with `ansible-playbook update-challenges.yml --check`, then apply them:
+
+[source,bash]
+----
+cd /projects/aia-instructor
+ansible-playbook update-challenges.yml
+----
+
+This workflow matches challenges by name and retains their IDs and solves. Unchanged flags and hints retain their IDs, including purchased hints. Challenges absent from YAML remain on the board; use `state: hidden` to hide them. Renaming creates a new challenge, removing hints removes their purchases, and changing points can change standings. Apply content changes before a customer event whenever possible.
+
+=== Verify Your Changes
+
+. Open your CTFd instance: {ctfd_url}
+. Confirm that the edited challenge has the new point value.
+. If you added a challenge, verify its category, prerequisites, hints, and accepted flag.
+. Confirm that the *Write Your Name in the Sand* solve you created after the Module 4 reset is still present. This exercise changes *Ansible Docs*, so the unchanged Warm Up solve provides a clear preservation check. Renaming or repricing a solved challenge can affect standings.
+
+=== Full Deployment Resets Progress
+
+[WARNING]
+====
+Running `deploy.yml` clears solves, submissions, awards, and purchased hints on your personal board. It preserves accounts, passwords, settings, branding, and challenge IDs while applying the challenge definitions.
+====
+
+Module 4 deliberately reset your personal training board after the practice round. For a customer event, reset before participants begin. Use `update-challenges.yml` for content edits that retain progress; never reset a board during an active competition.
+
+== State Coordination and Artifact Handoff
+
+[cols="1,2,2",options="header"]
+|===
+| Operation | Intended Use | Effect on Progress
+| `update-challenges.yml` | Update personal board content | Retains challenge IDs and solves; point changes affect scores and removed hints lose purchases
+| `deploy.yml` | Prepare your board for a new session | Clears challenge progress; retains accounts, passwords, and settings
+|===
+
+=== Fresh Environment Workflow — Artifact Handoff
+
+This section describes the organizer's workflow for preparing a fresh facilitator-training environment. Complete it before learners arrive. The customer-facing event normally uses a shared CTFd board; this training layout gives each learner a personal board.
+
+==== Step 1: Order from RHDP
+
+. Open the https://catalog.demo.redhat.com[Red Hat Demo Platform catalog].
+. Order the *Ansible Island Adventure leaderboard* catalog item first. It provides the shared OpenShift cluster, AAP, Gitea, SSO, and Dev Spaces.
+. Configure the purpose and duration:
+** *Purpose* — Select the appropriate purpose (e.g., "Customer demo", "Partner workshop").
+** *Duration* — Set to cover your event plus preparation time (typically 8–24 hours).
+. Wait until the leaderboard is fully provisioned. Keep its administrator credentials private.
+. Order the *Ansible Island Adventure student* catalog item or a student workshop, using these five values from the leaderboard's service details: OpenShift API server URL, cluster ingress domain, cluster administrator password, Keycloak administrator username, and Keycloak administrator password.
+. Set the student workshop's user count to the number of training learners. Each student deployment creates a managed node and integrates that learner's accounts and CTFd instance with the shared services.
+. Wait for every student deployment to finish. Allow approximately 60 minutes for the shared environment plus time for student provisioning, and leave time for the checks below.
+
+New leaderboard deployments configure two running Dev Spaces workspaces per instructor with separate persistent storage. Student deployments reuse that service.
+
+==== Step 2: Receive Credentials
+
+. Once provisioning completes, open the service details page in RHDP.
+. You will receive:
+** *Personal OpenShift access* — use the console to copy your instructor `oc login` command
+** *Participant service accounts and lab password* — in the student service details
+** *Instructor vault password* — your provisioned lab password also unlocks your instructor repository's encrypted challenge answers
+. Before starting this lab, the organizer runs the event post-deploy playbook against the deployed students with the private event vault password. It validates the leaderboard's Dev Spaces policy, verifies the learners' repositories, loads the 25 base challenges and real flags, re-keys each instructor answer vault with that learner's provisioned lab password, creates their AAP inventory and Machine credential, and writes an `ISLAND_ACCESS.md` guide in each instructor repository. This content step is still separate from student CI provisioning.
+. Verify student and administrator CTFd logins, challenge availability, the rendered Showroom service links, and both Dev Spaces repository workspaces before distributing access.
+
+Instructors need only their personal OpenShift login and local vault password to run the toolkit. Keep the leaderboard administrator credentials with the organizer.
+
+==== Step 3: Customize and Deploy
+
+. Open your `aia-instructor` Gitea repository in Dev Spaces as in Module 4.
+. Modify `roles/ctfd/vars/challenges.yml` to tailor challenges for the customer audience.
+. If needed, edit `roles/ctfd/vars/flags.yml` to add or change flag values:
++
+[source,bash]
+----
+ansible-vault edit roles/ctfd/vars/flags.yml --vault-password-file .vault-password
+----
++
+. Confirm `oc whoami` reports your instructor account. Before participants play, reset your personal board and apply the definitions:
++
+[source,bash]
+----
+cd /projects/aia-instructor
+ansible-playbook deploy.yml
+----
++
+The playbook retains the accounts and passwords provisioned by the student catalog item.
+
+==== Step 4: Generate and Distribute Handouts
+
+. Run `ansible-playbook generate-handouts.yml` from your instructor repository.
+. Open `handouts/generated/access.md` for service URLs and existing training usernames. Print from Markdown preview or distribute it privately; no PDF tools are required.
+. Supply the provisioned lab password separately from the student service details. The handout does not create users or include passwords. This training board uses one `lab-user`; a customer event with multiple participants requires its own account provisioning.
+. Distribute handouts before or at the start of the event.
+
+== Key Takeaways
+
+* Challenge content is defined in YAML variables files and can be customized per engagement without modifying the playbook or roles.
+* Use `update-challenges.yml` for content edits after checking the discovered personal board.
+* `deploy.yml` clears your board's progress; account passwords remain unchanged.
+* For customer events: order from RHDP → verify services → customize challenges → distribute credentials → facilitate.

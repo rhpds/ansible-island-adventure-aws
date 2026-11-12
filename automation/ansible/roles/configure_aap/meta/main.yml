@@ -1,0 +1,8 @@
+galaxy_info:
+  author: Mitesh Sharma <mitsharm@redhat.com>
+  description: Seed AAP with per-instructor inventories and machine credentials
+  company: Red Hat
+  license: GPLv3.0
+  min_ansible_version: "2.1"
+  galaxy_tags: []
+dependencies: []

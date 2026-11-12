@@ -1,0 +1,87 @@
+---
+- name: Measure control, AAP execution, and managed-node network paths
+  aia_connectivity:
+    url: "{{ aia_student.aap_url }}"
+    username: "{{ aia_student.aap_username }}"
+    password: "{{ aap_password }}"
+    guid: "{{ guid }}"
+    node: "{{ aia_managed_node }}"
+    endpoints:
+      - name: gitea
+        url: "{{ gitea_url }}"
+      - name: aap
+        url: "{{ aia_student.aap_url }}"
+      - name: ctfd
+        url: "{{ aia_student.ctfd_url }}"
+      - name: devspaces
+        url: "{{ aia_student.devspaces_url }}"
+    managed_web_url: "{{ aia_student.managed_node_web_url | default(omit) }}"
+    connect_timeout: "{{ aia_readiness_connect_timeout }}"
+    require_all_addresses: "{{ aia_readiness_require_all_addresses }}"
+    validate_certs: "{{ aia_validate_certs | default(true) }}"
+    job_timeout: "{{ aia_readiness_job_timeout }}"
+  register: aia_connectivity_result
+  when: aia_readiness_enabled | bool
+
+- name: Persist and report readiness evidence before enforcing the gate
+  when:
+    - aia_readiness_enabled | bool
+    - not ansible_check_mode
+  block:
+    - name: Create the private readiness report directory
+      ansible.builtin.file:
+        path: "{{ aia_readiness_report_dir }}"
+        state: directory
+        mode: '0700'
+
+    - name: Save a distinct report for this readiness sample
+      ansible.builtin.copy:
+        dest: "{{ aia_readiness_report_dir }}/{{ (aia_run_id ~ '.') if aia_run_id is defined else '' }}{{ instructor.name }}.{{ aia_connectivity_result.report.id }}.readiness.json"
+        content: "{{ aia_connectivity_result.report | to_nice_json }}\n"
+        mode: '0600'
+      register: aia_readiness_file
+
+    - name: Report the result and AAP command evidence
+      ansible.builtin.debug:
+        msg:
+          instructor: "{{ instructor.name }}"
+          status: "{{ aia_connectivity_result.report.status }}"
+          report: "{{ aia_readiness_file.dest }}"
+          control: "{{ aia_connectivity_result.report.sources.control.status }}"
+          aap: "{{ aia_connectivity_result.report.sources.aap.status }}"
+          aap_ssh: "{{ aia_connectivity_result.report.sources.aap_ssh.status }}"
+          managed_node: "{{ aia_connectivity_result.report.sources.managed_node.status }}"
+          aap_probe_url: "{{ aia_connectivity_result.report.sources.aap.url | default('not launched') }}"
+          aap_ssh_url: "{{ aia_connectivity_result.report.sources.aap_ssh.url | default('not launched') }}"
+          aap_commands: "{{ aia_connectivity_result.report.aap_commands | default([]) }}"
+
+    - name: Publish the latest report in the instructor lab namespace
+      kubernetes.core.k8s:
+        kubeconfig: "{{ aia_kubeconfig | default(omit) }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: aia-readiness
+            namespace: "{{ aia_readiness_namespace }}"
+            labels:
+              island-adventure/instructor: "{{ instructor.name }}"
+          data:
+            report.json: "{{ aia_connectivity_result.report | to_json }}"
+
+    - name: Publish catalog readiness status before enforcing the gate
+      ansible.builtin.include_tasks: publish.yml
+      when: aia_readiness_publish_user_info | bool
+
+    - name: Require all student runtime paths to pass before handoff
+      when: aia_readiness_enforce_gate | bool
+      ansible.builtin.assert:
+        that:
+          - aia_connectivity_result.report.status == 'passed'
+        fail_msg: >-
+          Connectivity readiness failed for {{ instructor.name }}.
+          Evidence: {{ aia_readiness_file.dest }} and ConfigMap
+          {{ aia_readiness_namespace }}/aia-readiness. Use the report's AAP command
+          URLs and resolved-address results to investigate; catalog provisioning
+          or control-machine SSH alone does not establish runtime readiness.

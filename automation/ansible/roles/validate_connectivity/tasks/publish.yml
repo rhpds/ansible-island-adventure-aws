@@ -1,0 +1,13 @@
+---
+- name: Publish catalog connectivity evidence without credentials
+  agnosticd.core.agnosticd_user_info:
+    msg: |
+      Connectivity readiness: {{ aia_connectivity_result.report.status }}
+      Evidence: ConfigMap {{ aia_readiness_namespace }}/aia-readiness
+      AAP probe: {{ aia_connectivity_result.report.sources.aap.url | default('not launched') }}
+      AAP SSH: {{ aia_connectivity_result.report.sources.aap_ssh.url | default('not launched') }}
+    data:
+      aia_readiness_status: "{{ aia_connectivity_result.report.status }}"
+      aia_readiness_id: "{{ aia_connectivity_result.report.id }}"
+      aia_readiness_namespace: "{{ aia_readiness_namespace }}"
+      aia_readiness_configmap: aia-readiness

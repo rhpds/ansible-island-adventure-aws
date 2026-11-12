@@ -1,0 +1,87 @@
+---
+# ── Cluster Connection ──────────────────────────────────────────
+# Path to the leaderboard ResourceClaim YAML
+aia_leaderboard_env: ""  # required — path to .leaderboard.env
+
+# Override cluster connection (skip env file parsing)
+aia_cluster_api_url: ""
+aia_cluster_admin_username: ""
+aia_cluster_admin_password: ""
+aia_cluster_apps_domain: ""
+
+# ── Instructor Configuration ────────────────────────────────────
+# List of instructor dicts: [{name: user1, password: pass1}, ...]
+# If empty, auto-generated from cluster users or a count
+aia_instructors: []
+aia_instructor_count: 4  # used if aia_instructors is empty and no users in env
+
+# ── Namespace Prefixes ──────────────────────────────────────────
+aia_gitea_namespace: gitea
+aia_ctfd_ns_suffix: ctfd
+aia_lab_ns_suffix: lab
+
+# ── CTFd ────────────────────────────────────────────────────────
+aia_ctfd_image: "ctfd/ctfd:3.7.7"
+aia_mysql_image: "mariadb:10.4.12"
+aia_redis_image: "redis:4"
+aia_ctfd_admin_username: admin
+aia_ctfd_admin_password: supersecret123!
+aia_ctfd_admin_email: admin@example.com
+aia_mysql_database: ctfd
+aia_mysql_user: ctfd
+aia_mysql_password: ctfd
+aia_mysql_root_password: ctfd
+aia_mysql_pvc_size: 1Gi
+aia_redis_pvc_size: 1Gi
+aia_ctfd_logs_pvc_size: 1Gi
+aia_ctfd_uploads_pvc_size: 1Gi
+
+# ── Shared Gitea ────────────────────────────────────────────────
+aia_gitea_image: "gitea/gitea:1.20.1-rootless"
+aia_gitea_admin_user: gitadmin
+aia_gitea_admin_password: supersecret123!
+aia_gitea_admin_email: admin@example.com
+aia_gitea_postgres_user: giteauser
+aia_gitea_postgres_password: giteapassword
+aia_gitea_postgres_database: giteadb
+aia_gitea_postgres_image: "postgres:14-alpine"
+aia_gitea_volume_size: 4Gi
+aia_gitea_postgres_volume_size: 4Gi
+aia_instructor_repos:
+  - url: https://github.com/l3acon/ansible-survival-kit.git
+    name: ansible-survival-kit
+
+# ── Verifier ────────────────────────────────────────────────────
+aia_verifier_image: "quay.io/l3acon/ctf-verifier:latest"
+aia_verifier_hmac_secret: ""  # auto-generated per instructor if empty
+
+# ── AAP (pre-installed on cluster) ──────────────────────────────
+aia_aap_manifest_path: ""  # path to manifest.zip — required if license not yet applied
+
+# ── SSH user on managed nodes (for AAP/verifier config) ─────────
+aia_vm_ssh_user: student
+
+# ── Resource Requests ───────────────────────────────────────────
+aia_resources:
+  mysql:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+  redis:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+  ctfd:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: '1', memory: 1Gi }
+  verifier:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+  gitea:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: '1', memory: 1Gi }
+  gitea_postgres:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+# ── Retries ─────────────────────────────────────────────────────
+aia_k8s_retries: 30
+aia_k8s_retry_delay: 10

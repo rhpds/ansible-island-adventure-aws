@@ -1,0 +1,31 @@
+---
+# rhpds.aia.deploy_vms — Deploy VMs and configure AAP inventory.
+# Requires: aia_aap_url, aia_aap_admin_password (from leaderboard deploy)
+# Handles: CNV operator install, HyperConverged CR, per-instructor VMs,
+#          AAP inventory + credential configuration via Gateway API.
+
+- name: Validate required inputs
+  ansible.builtin.assert:
+    that:
+      - aia_aap_url | length > 0
+      - aia_aap_admin_password | length > 0
+      - aia_instructors | length > 0
+    fail_msg: "deploy_vms requires aia_aap_url, aia_aap_admin_password, and aia_instructors"
+
+- name: Load VM cluster environment
+  when: aia_vm_env | length > 0
+  ansible.builtin.include_vars:
+    file: "{{ aia_vm_env }}"
+    name: _vm_claim
+
+# TODO: Login to VM cluster (may be different from leaderboard cluster)
+# TODO: Install OpenShift Virtualization operator
+# TODO: Deploy HyperConverged CR
+# TODO: Create per-instructor VMs with cloud-init
+# TODO: Configure AAP inventory + machine credentials via Gateway API
+
+- name: Placeholder — deploy_vms role
+  ansible.builtin.debug:
+    msg: >-
+      deploy_vms: {{ aia_instructors | length }} VMs to provision.
+      AAP at {{ aia_aap_url }}. Implementation pending VM cluster provisioning.

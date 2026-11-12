@@ -1,0 +1,289 @@
+= Play the Game
+:navtitle: 3. Play the Game
+:page-aliases: module-04-play-the-game.adoc
+
+== Timing and Participant Mode
+
+Allow *50 minutes*: *10 minutes for service access and workspace setup*, *35 minutes of scored play*, and *5 minutes for debrief and saving your results*.
+The facilitator starts the scoring clock once everyone is ready. All flag submissions, including Warm Up, belong inside that 35-minute window. Choose challenges that fit your experience; completing every exercise below is not required.
+
+Use your player account and the *Ansible Survival Kit* throughout this module. The environment, challenges, AAP inventory, and Machine credential have already been prepared by the organizer. You do not need the instructor toolkit, an instructor vault-password file, or a terminal `oc login` to perform the exercises below. You will explore event administration in Module 4.
+
+== Receive Handouts and Orientation
+
+In a customer event, participants receive a printed or digital handout containing:
+
+* Login credentials (username and password)
+* Shortened URLs for CTFd, Gitea, AAP, and Dev Spaces
+* A brief overview of the challenge categories
+
+For this lab, use the following accounts:
+
+include::partial$participant-access.adoc[]
+
+Your service URLs:
+
+[cols="1,2",options="header"]
+|===
+| Service | URL
+
+| CTFd | {ctfd_url}
+| Gitea | {gitea_url}
+| AAP | {aap_url}
+| Dev Spaces | {devspaces_url}
+|===
+
+=== Log into CTFd
+
+. Open your CTFd instance: {ctfd_url}
+. Click *Login* and sign in as `{ctfd_student_username}` with your provisioned lab password.
+. You should see the challenge board with categories listed.
+
+Stay signed in as the player while playing. You will use the separate facilitator account in Module 4.
+
+== Open the Ansible Survival Kit Workspace
+
+Use your *`ansible-survival-kit`* repository for participant challenge playbooks. You will open the separate `aia-instructor` repository for administration in Module 4.
+
+. Open Gitea at {gitea_url} and sign in as `{gitea_username}` with your provisioned lab password.
+. Open *your own* `ansible-survival-kit` repository and select the *`main`* branch.
+. Click *Code → HTTPS* and copy the clone URL. It should have this form:
++
+[source,text,subs="attributes"]
+----
+{gitea_url}/{gitea_username}/ansible-survival-kit.git
+----
+. Open {devspaces_url}, select *Log in with OpenShift* if prompted, and use your personal account. Allow the Dev Spaces access request. Choose *Create Workspace* and paste the repository URL. Leave *Temporary Storage* off and select *Create & Open*. Use the repository's `.devfile.yaml`. When asked "Do you trust the authors of this repository?", select *Continue*. If Git requests credentials, use your Gitea account and provisioned lab password.
+. Wait for the editor and the *Install lab collections* startup task to finish. The devfile supplies Ansible, Lint, Navigator, and related tools; keep it rather than selecting the default devfile.
+. Open *Terminal → New Terminal* and check the repository and tools:
++
+[source,bash]
+----
+cd /projects/ansible-survival-kit
+git branch --show-current
+ansible --version
+ansible-lint --version
+ansible-navigator --version
+----
+. Confirm that the branch is `main` and the tools run successfully. Tell the facilitator if access or startup is blocked before scored play begins.
+
+Dev Spaces clones the repository for you. Run the CLI exercises below from `/projects/ansible-survival-kit`; you do not need another clone. The AAP Treasure Hunt project later uses the separate `treasurehunt` branch.
+
+The survival-kit workspace does not load the instructor toolkit's `.vault-password` file. Use each challenge's specified vault passphrase when prompted; the instructor vault password is not the password for every challenge.
+
+== Warm Up Challenges
+
+These challenges get everyone started and verify basic access.
+
+=== Write Your Name in the Sand
+
+. In CTFd, click on your username in the top-right corner, then *Settings*.
+. Change your *User Name* to your real name (e.g., Jane Smith).
+. Change your *Email* to your real email address.
+. Return to the challenges page, open "Write your name in the sand," and submit the flag: `DONE`
+
+=== Unlock the Island
+
+The facilitator provides a key to unlock the remaining challenges.
+
+[NOTE]
+====
+For this training round, the session facilitator gives you the unlock key. Continue as a player; instructor answer-vault access is covered after the game in Module 4.
+When you facilitate a customer event, you will provide the key to participants to control the start of play.
+====
+
+=== Ansible Docs and Collections
+
+. *Ansible Docs* — Find the URL to the official Ansible documentation and submit it.
+. *Ansible Collections* — Find the community collection hub URL and submit it.
+. *Ansible Certified Collections* — Find the URL for Red Hat's certified content hub.
+
+[TIP]
+====
+Hints are available for each challenge at a point cost. In a customer event, encourage participants to use hints rather than getting stuck — engagement is more important than perfect scores.
+====
+
+== Let's Get Started Challenges
+
+These challenges verify that participants can access their environment tools.
+
+=== The Navigator's Run
+
+. Use the *Ansible Survival Kit* Dev Spaces workspace you opened above.
+. Open a terminal within the workspace.
+. Run the following command to find the Ansible core version:
++
+[source,bash]
+----
+ansible --version
+----
++
+. Submit the version number as your flag in CTFd.
+
+=== The High Tower Signal Strength
+
+. Open the *AAP Console*: {aap_url}
+. Log in with your AAP credentials: `{aap_username}` / `{password}`
+. Find the *Platform Version* on the dashboard or under the help menu (*?* icon → *About*).
+. Submit the platform version as your flag.
+
+=== AAP Controller Version
+
+. Still in the AAP Console, look for the *Controller version* — this is different from the Platform version.
+. Check the *About* dialog or the footer of the Automation Controller UI.
+. Submit the controller version as your flag.
+
+== At the Beach Challenges
+
+These challenges introduce Ansible CLI skills.
+
+=== Great Git-Away
+
+. Open *Gitea*: {gitea_url}
+. Log in as `{gitea_username}` with your provisioned lab password.
+. Find your `ansible-survival-kit` repository and note its name.
+. Submit the repository name as your flag in CTFd.
+
+=== Hello World Beach
+
+. In the survival-kit Dev Spaces terminal, use the repository already cloned by Dev Spaces:
++
+[source,bash]
+----
+cd /projects/ansible-survival-kit
+----
++
+. Run the `hello-world.yml` playbook:
++
+[source,bash]
+----
+ansible-playbook hello-world.yml
+----
++
+. Watch the output for the keyword and submit it as your flag.
+
+=== Message in a Bottle at the Beach
+
+. In the `ansible-survival-kit` repository, find the file `message-in-a-bottle.txt`.
+. Decrypt it using Ansible Vault with the passphrase `redhat`:
++
+[source,bash]
+----
+ansible-vault view message-in-a-bottle.txt --ask-vault-pass
+----
++
+. Enter the passphrase `redhat` when prompted.
+. Submit the decrypted message as your flag.
+
+== Treasure Hunt Challenges
+
+These challenges use the *Ansible Automation Platform Controller* to orchestrate automation.
+
+=== Inspect Your Managed Node in AAP
+
+. Open *Automation Execution → Infrastructure → Inventories → Island Adventure* in your AAP organization.
+. Under *Hosts*, open `rhel` and review its variables. `aia_managed_node_fqdn` records the VM's actual FQDN; `ansible_host` and `ansible_port` identify the published SSH endpoint that AAP can reach.
+. Under *Groups*, open `web` and confirm that `rhel` is a member. The Apache playbook targets this group.
+. Open *Automation Execution → Infrastructure → Credentials* and locate *Managed Node SSH*. This Machine credential supplies the VM's SSH username/password and sudo settings; the password is masked in AAP.
+
+The inventory also contains `localhost` for the controller-local exercises below. Use *Island Adventure* for all three job templates. If the inventory, `web` membership, or Machine credential is missing, ask the organizer to rerun student access configuration before continuing.
+
+=== Hello World Treasure Hunt
+
+. In the AAP Controller ({aap_url}), go to *Automation Execution → Projects*.
+. Click *Create project* and configure it:
+* *Name:* `ansible-survival-kit`
+* *Source Control Type:* Git
+* *Source Control URL:* Your Gitea repository URL
+* *Source Control Branch:* `treasurehunt`
+. Save and wait for the project to sync successfully.
+. Go to *Automation Execution → Templates* and click *Create template → Create job template*:
+* *Name:* `Hello World`
+* *Project:* `ansible-survival-kit`
+* *Playbook:* `hello-world.yml`
+* *Inventory:* `Island Adventure`
+. Launch the job and find the keyword in the output.
+. Submit the keyword as your flag.
+
+=== Secret Message Treasure Hunt
+
+. Go to *Automation Execution → Infrastructure → Credentials*.
+. Click *Create credential*:
+* *Name:* `Vault Credential`
+* *Credential Type:* Vault
+* *Vault Password:* `AAP`
+. Create a new *Job Template*:
+* *Name:* `Secret Message`
+* *Project:* `ansible-survival-kit`
+* *Playbook:* `secret-word.yml`
+* *Inventory:* `Island Adventure`
+* *Credentials:* Add the *Vault Credential* you just created. This playbook runs on `localhost` and does not need a Machine credential.
+. Launch the job and find the secret message in the output.
+. Submit the secret message as your flag.
+
+=== You Found a Treasure Chest
+
+. Create a new *Job Template*:
+* *Name:* `Deploy Web Server`
+* *Project:* `ansible-survival-kit`
+* *Playbook:* `apache/apache_role_install.yml`
+* *Inventory:* `Island Adventure`
+* *Credentials:* Add *Managed Node SSH* and the *Vault Credential* (passphrase `AAP`)
+* *Enable Privilege Escalation:* Check this option
+. Launch the job and wait for it to complete.
+ifdef::managed_node_web_url[]
+. Open {managed_node_web_url}[your managed node's web page] in a browser and find the treasure keyword. You can also fetch it from your Dev Spaces terminal:
++
+[source,bash,subs="attributes"]
+----
+curl -fsS '{managed_node_web_url}'
+----
++
+The URL belongs to your instructor's VM. It can report unavailable until Apache is deployed; if it still does after the job succeeds, check the job's inventory, `web` group, and Machine credential.
+endif::managed_node_web_url[]
+ifndef::managed_node_web_url[]
+. This deployment does not publish a web URL. Fetch the page through your VM's SSH endpoint from the Dev Spaces terminal. Use your provisioned lab password if SSH prompts for authentication:
++
+[source,bash,subs="attributes"]
+----
+ssh -p {bastion_ssh_port} {bastion_ssh_user_name}@{bastion_public_hostname} 'curl -fsS http://127.0.0.1/'
+----
++
+endif::managed_node_web_url[]
+. Find the treasure keyword in the response and submit it as your flag.
+
+== Side Quest and Trivia
+
+=== Ansible Quest Video Game
+
+The https://l3acon.github.io/ansible-quest/[Ansible Quest] is an interactive video game that teaches Ansible developer tool concepts through exploration.
+
+. Open the Side Quest challenges in CTFd.
+. Launch the Ansible Quest game from the challenge description link.
+. Explore the game world and find treasure chests containing flags for tools like `ansible-creator`, `ansible-lint`, `ansible-navigator`, `molecule`, and more.
+. Submit each flag you discover.
+
+=== Trivia Challenges
+
+. *Marooned on World 62* — Who created the Ansible automation tool? Submit their first and last name.
+. *No Strings on the Shoreline* — Which heavyweight, Ruby-based configuration management tools inspired Ansible's agentless design?
+
+== Debrief and Discussion
+
+When the facilitator ends the 35-minute scored window, stop submitting flags. Use the final five minutes to save your results and reflect from a *facilitator's perspective*.
+
+Record your final score, solved challenges or categories, hints used, and any access or challenge blockers. You can save a screenshot of your CTFd score or challenge view; keep credentials and tokens out of screenshots. Keep these notes for Modules 4 and 6: the next module deliberately clears your personal board's game progress.
+
+* *Which challenges resonated most?* — At the Beach and Treasure Hunt provide the deepest hands-on learning.
+* *Where did participants struggle?* — Common blockers include Gitea clone URLs, vault password confusion, and credential configuration in AAP.
+* *How does audience composition affect pacing?* — Technical audiences blaze through Warm Up; non-technical audiences need more roamer support during At the Beach.
+* *What would you customize for your customers?* — Module 5 covers how to modify challenge content.
+
+== Key Takeaways
+
+* Playing through the event as a participant is essential for effective facilitation — you must know the challenges firsthand.
+* Use your `ansible-survival-kit` Gitea clone in Dev Spaces for CLI challenges; return to `aia-instructor` for event administration.
+* The challenge progression moves from basic Ansible awareness through CLI proficiency to controller orchestration, covering a wide skill spectrum.
+* The scoring and hint system balances challenge difficulty with accessibility, keeping all skill levels engaged.
+* Understanding which challenges resonate with different audiences helps you customize and pace future customer events.
+* Keep your recorded results for the administration reset exercise and the later engagement discussion.

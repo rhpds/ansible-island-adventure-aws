@@ -1,0 +1,159 @@
+= From Event to Pipeline
+:navtitle: 6. From Event to Pipeline
+
+Allow *10 minutes* for positioning, engagement analysis, and a short follow-up plan. Continue longer discussion or Q&A after the training session if needed.
+
+== Positioning and Lead Generation
+
+Ansible Island Adventure is not just a technical event — it is a *pipeline generation tool* when paired with proper positioning and follow-up.
+
+=== How to Position the Event
+
+When pitching Ansible Island Adventure to customers and partners, emphasize:
+
+* *Hands-on experience* — Participants walk away having actually used Ansible Automation Platform, not just watched a demo.
+* *Low barrier to entry* — The gamified format is approachable for mixed-skill audiences. Beginners feel welcome; experts feel challenged.
+* *Fun and memorable* — The pirate theme and competitive element make it stand out from standard vendor workshops. Customers talk about it after the event.
+* *Customizable* — Challenges can be tailored to the customer's industry, use case, or technical maturity (as you learned in Module 5).
+
+=== Effective Positioning Scenarios
+
+[cols="1,3",options="header"]
+|===
+| Scenario | Positioning
+
+| *Customer enablement day*
+| "Let your team experience Ansible Automation Platform hands-on through a fun, competitive challenge — no prior Ansible experience required."
+
+| *Partner technical workshop*
+| "Equip your engineers with practical AAP skills through gamified challenges that progress from basics to real-world automation."
+
+| *Conference booth activity*
+| "Drive traffic to your booth with a live CTF competition. Participants compete for prizes while learning Ansible."
+
+| *Executive briefing add-on*
+| "After the business discussion, offer a 90-minute event with up to 45 minutes of scored hands-on challenges."
+|===
+
+== Engagement Metrics and Analysis
+
+CTFd captures participant data that helps identify interest areas and skill levels. Use the score, solved challenges, hints, and observations you saved at the end of Module 3 for this training discussion. The controlled Module 4 reset cleared the original game progress; your current board contains only the later practice activity and content edits.
+
+For a customer event, collect the event's results before any reset and retain them for follow-up. The training lab's personal boards demonstrate the workflow; a shared customer board provides the multi-participant results discussed below.
+
+=== Access the CTFd Admin Panel
+
+. Open your CTFd instance: {ctfd_url}
+. Log in as `{ctfd_admin_username}` (the facilitator account) with your provisioned lab password.
+. Navigate to the *Admin Panel* (gear icon or `/admin` URL path).
+
+=== Key Metrics to Review
+
+[cols="1,3",options="header"]
+|===
+| Metric | What It Tells You
+
+| *Challenge completion rates*
+| Which challenges were most/least completed? Low completion on a specific challenge may indicate it's too hard for the audience — or that the topic needs more enablement.
+
+| *Time on platform*
+| How long did participants stay engaged? Higher time-on-platform correlates with deeper learning and higher lead quality.
+
+| *Hint usage*
+| Which challenges required the most hints? High hint usage identifies topics where participants need follow-up training or enablement resources.
+
+| *Category progression*
+| How far did participants get through the challenge categories? Participants who reached Treasure Hunt demonstrated real AAP proficiency.
+
+| *Leaderboard distribution*
+| Is there a wide score spread or a tight cluster? Wide spreads indicate mixed skill levels; tight clusters indicate a well-matched audience.
+|===
+
+=== Map Engagement to Interest Areas
+
+Challenge completion patterns reveal participant interest areas:
+
+[cols="1,2",options="header"]
+|===
+| Challenge Pattern | Likely Interest Area
+
+| Strong Warm Up + At the Beach completion
+| Ansible fundamentals — good candidate for Ansible Getting Started training
+
+| Strong Treasure Hunt completion (projects, templates, credentials)
+| AAP Controller orchestration — interested in scaling automation
+
+| Completed "You found a treasure chest" (web server deployment)
+| Infrastructure automation — interested in end-to-end automation workflows
+
+| Active Side Quest participation
+| Ansible developer tools ecosystem — interested in testing, linting, CI/CD
+
+| High Trivia engagement
+| Ansible community and ecosystem — potential community champion
+|===
+
+== Follow-Up Planning and Resources
+
+=== Build a Follow-Up Plan
+
+Using your saved Module 3 observations for this exercise, build a sample follow-up plan. For a customer event, use the retained CTFd event results alongside your facilitation notes:
+
+. *Identify strong leads* — Participants who completed Treasure Hunt challenges and stayed on-platform for the full event duration are your highest-quality leads.
+. *Segment by interest* — Group participants by their challenge completion patterns (see table above) to tailor follow-up messaging.
+. *Schedule follow-up within 1 week* — Momentum fades quickly. Send a personalized follow-up email referencing their specific achievements in the event.
+. *Provide next steps* — Include links to relevant resources:
+** https://www.redhat.com/en/technologies/management/ansible[Ansible Automation Platform product page]
+** https://www.redhat.com/en/services/training/do007-ansible-essentials-simplicity-automation-technical-overview[Ansible Essentials training]
+** https://catalog.demo.redhat.com[Red Hat Demo Platform] — for continued hands-on access
+** Offer a deeper technical workshop or proof-of-concept engagement
+
+=== Sample Follow-Up Email Template
+
+[source,text]
+----
+Subject: Great playing Ansible Island Adventure with you!
+
+Hi [Name],
+
+Thanks for joining us at the Ansible Island Adventure event!
+You made it through [X] challenges and scored [Y] points — impressive work.
+
+I noticed you spent the most time on [category] challenges, which tells me
+[relevant insight]. I'd love to continue the conversation about how
+Red Hat Ansible Automation Platform can help [specific use case].
+
+Would you be open to a 30-minute follow-up to discuss [specific topic]?
+
+Best,
+[Your name]
+----
+
+=== Access All Resources
+
+Confirm that you have access to everything needed for independent delivery:
+
+* [ ] Deployment repository (this repository)
+* [ ] Challenge definitions (`roles/ctfd/vars/challenges.yml` in the instructor toolkit)
+* [ ] Facilitation guide and handout templates
+* [ ] RHDP catalog access for ordering environments
+* [ ] Your completed lab experience for confidence in facilitation
+
+== Open Q&A
+
+Take this time to ask questions about:
+
+* Ordering and configuring environments from RHDP
+* Customizing challenges for specific customer scenarios
+* Facilitation techniques and pacing strategies
+* Pipeline follow-up best practices
+* Scaling the event for larger audiences
+
+== Key Takeaways
+
+* Ansible Island Adventure is not just a technical event — it is a pipeline generation tool when paired with proper follow-up.
+* CTFd captures participant data and engagement metrics that reveal interest areas and skill levels.
+* Challenge completion patterns, hint usage, and time on platform provide actionable insight for targeted outreach.
+* All resources — deployment automation, event assets, facilitation guides — are available for independent delivery via the RHDP catalog.
+
+Continue to the xref:conclusion.adoc[Conclusion] for a summary of what you've accomplished and next steps.

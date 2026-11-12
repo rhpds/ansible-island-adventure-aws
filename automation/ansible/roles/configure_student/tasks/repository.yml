@@ -1,0 +1,60 @@
+---
+- name: "{{ aia_repository.name }} — Read the student repository"
+  ansible.builtin.uri:
+    url: "{{ gitea_url }}/api/v1/repos/{{ gitea_username }}/{{ aia_repository.name }}"
+    user: "{{ gitea_username }}"
+    password: "{{ gitea_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aia_validate_certs }}"
+    status_code: [200, 404]
+  register: _aia_repository
+  no_log: true
+
+- name: "{{ aia_repository.name }} — Fork a missing starter repository"
+  ansible.builtin.uri:
+    url: "{{ gitea_url }}/api/v1/repos/starter/{{ aia_repository.name }}/forks"
+    method: POST
+    body_format: json
+    body: {}
+    user: "{{ gitea_username }}"
+    password: "{{ gitea_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aia_validate_certs }}"
+    status_code: [201, 202, 409]
+  when: _aia_repository.status == 404
+  changed_when: true
+  no_log: true
+
+- name: "{{ aia_repository.name }} — Wait for the student's fork"
+  ansible.builtin.uri:
+    url: "{{ gitea_url }}/api/v1/repos/{{ gitea_username }}/{{ aia_repository.name }}"
+    user: "{{ gitea_username }}"
+    password: "{{ gitea_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aia_validate_certs }}"
+    status_code: [200, 404]
+  register: _aia_repository_ready
+  until: _aia_repository_ready.status == 200
+  retries: 20
+  delay: 3
+  no_log: true
+
+- name: "{{ aia_repository.name }} — Validate repository ownership"
+  ansible.builtin.assert:
+    that:
+      - _aia_repository_ready.json.owner.login == gitea_username
+      - _aia_repository_ready.json.name == aia_repository.name
+    fail_msg: Repository ownership differs from the deployed student identity.
+
+- name: "{{ aia_repository.name }} — Verify required branches"
+  ansible.builtin.uri:
+    url: "{{ gitea_url }}/api/v1/repos/{{ gitea_username }}/{{ aia_repository.name }}/branches/{{ item }}"
+    user: "{{ gitea_username }}"
+    password: "{{ gitea_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aia_validate_certs }}"
+    status_code: 200
+  loop: "{{ aia_repository.branches }}"
+  loop_control:
+    label: "{{ aia_repository.name }}/{{ item }}"
+  no_log: true

@@ -1,0 +1,38 @@
+---
+# Build CTFd import archive and upload to each instructor's CTFd instance.
+# Called once — loops internally over instructors.
+
+- name: Merge challenge lists
+  ansible.builtin.set_fact:
+    _all_challenges: "{{ aia_ctfd_challenges + aia_ctfd_challenges_advanced }}"
+
+- name: Build challenge name→ID map for prerequisites
+  ansible.builtin.set_fact:
+    _challenge_name_to_id: >-
+      {{ _challenge_name_to_id | default({}) | combine({item.name: idx + 1}) }}
+  loop: "{{ _all_challenges }}"
+  loop_control:
+    index_var: idx
+
+- name: Hash CTFd admin password (bcrypt_sha256 for CTFd)
+  ansible.builtin.shell:
+    cmd: |
+      python3 -c "
+      import sys
+      from passlib.hash import bcrypt_sha256
+      print(bcrypt_sha256.hash(sys.stdin.read().strip()))
+      " <<< "{{ aia_ctfd_admin_password }}"
+  register: _admin_hash_cmd
+  changed_when: false
+
+- name: Set admin hash fact
+  ansible.builtin.set_fact:
+    _ctfd_admin_hash: "{{ _admin_hash_cmd.stdout | trim }}"
+
+# ── Per-instructor archive build + upload ────────────────────────
+- name: Configure CTFd for each instructor
+  ansible.builtin.include_tasks: configure_ctfd_per_instructor.yml
+  loop: "{{ aia_instructors }}"
+  loop_control:
+    loop_var: _inst
+    label: "{{ _inst.name }}"

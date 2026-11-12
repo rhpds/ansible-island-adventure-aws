@@ -1,0 +1,91 @@
+---
+# ── Instructor Configuration ────────────────────────────────────
+# Which cluster users are instructors (subset of users from .cnv.env)
+# Set to empty list to use ALL provisioned users
+instructor_users: []
+
+# ── Namespace Prefixes ──────────────────────────────────────────
+gitea_namespace: gitea
+
+# Per-instructor namespace suffixes (prefixed with userN-)
+ctfd_ns_suffix: ctfd
+lab_ns_suffix: lab
+
+# ── CTFd Configuration ──────────────────────────────────────────
+ctfd_image: "ctfd/ctfd:3.7.7"
+mysql_image: "mariadb:10.4.12"
+redis_image: "redis:4"
+
+ctfd_admin_username: admin
+ctfd_admin_password: supersecret123!
+ctfd_admin_email: admin@example.com
+
+mysql_database: ctfd
+mysql_user: ctfd
+mysql_password: ctfd
+mysql_root_password: ctfd
+
+# PVC sizes
+mysql_pvc_size: 1Gi
+redis_pvc_size: 1Gi
+ctfd_logs_pvc_size: 1Gi
+ctfd_uploads_pvc_size: 1Gi
+
+# ── Shared Gitea Configuration ──────────────────────────────────
+gitea_image: "gitea/gitea:1.20.1-rootless"
+gitea_admin_user: gitadmin
+gitea_admin_password: supersecret123!
+gitea_admin_email: admin@example.com
+gitea_postgres_user: giteauser
+gitea_postgres_password: giteapassword
+gitea_postgres_database: giteadb
+gitea_postgres_image: "postgres:14-alpine"
+gitea_volume_size: 4Gi
+gitea_postgres_volume_size: 4Gi
+
+# Repos forked into each instructor's Gitea account
+instructor_repos:
+  - url: https://github.com/l3acon/ansible-survival-kit.git
+    name: ansible-survival-kit
+
+# ── Verifier Configuration ──────────────────────────────────────
+verifier_image: "quay.io/l3acon/ctf-verifier:latest"
+verifier_hmac_secret: ""  # auto-generated per instructor if empty
+
+# ── Managed Node (VM) Configuration ─────────────────────────────
+vm_image_source: rhel9    # DataSource name from openshift-virtualization-os-images
+vm_ssh_user: student      # cloud-init user created on the VM
+
+# ── AAP Configuration ──────────────────────────────────────────
+aap_channel: "stable-2.7"
+aap_source: "redhat-operators"
+aap_manifest_path: "/home/matt/manifests/manifest.zip"
+
+# ── Dev Spaces Configuration ───────────────────────────────────
+devspaces_channel: "stable"
+devspaces_source: "redhat-operators"
+
+# ── Resource Requests (lab-optimized) ──────────────────────────
+resources:
+  mysql:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+  redis:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+  ctfd:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: '1', memory: 1Gi }
+  verifier:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+  gitea:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: '1', memory: 1Gi }
+  gitea_postgres:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+# ── k8s retry settings ─────────────────────────────────────────
+k8s_retries: 30
+k8s_retry_delay: 10

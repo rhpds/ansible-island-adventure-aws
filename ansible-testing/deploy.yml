@@ -1,0 +1,167 @@
+---
+- name: Deploy Ansible Island Adventure (CNV Multi-Instructor)
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  vars_files:
+    - vars/main.yml
+    - vars/flags.yml
+    - vars/challenges.yml
+
+  pre_tasks:
+    - name: Load CNV resource claim
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../.cnv.env"
+        name: cnv_claim
+
+    - name: Extract cluster credentials from provision data
+      ansible.builtin.set_fact:
+        cluster_api_url: "{{ cnv_claim.status.summary.provision_data.openshift_api_url }}"
+        cluster_admin_username: "{{ cnv_claim.status.summary.provision_data.openshift_cluster_admin_username }}"
+        cluster_admin_password: "{{ cnv_claim.status.summary.provision_data.openshift_cluster_admin_password }}"
+        cluster_admin_token: "{{ cnv_claim.status.summary.provision_data.openshift_cluster_admin_token }}"
+        cluster_apps_domain: "{{ cnv_claim.status.summary.provision_data.openshift_cluster_ingress_domain }}"
+        cluster_users: "{{ cnv_claim.status.summary.provision_data.users }}"
+        keycloak_url: "{{ cnv_claim.status.summary.provision_data.keycloak_admin_console }}"
+        keycloak_admin_user: "{{ cnv_claim.status.summary.provision_data.keycloak_admin_user }}"
+        keycloak_admin_password: "{{ cnv_claim.status.summary.provision_data.keycloak_admin_password }}"
+
+    - name: Login to OpenShift as cluster-admin
+      ansible.builtin.command:
+        argv:
+          - oc
+          - login
+          - "{{ cluster_api_url }}"
+          - "--username={{ cluster_admin_username }}"
+          - "--password={{ cluster_admin_password }}"
+          - --insecure-skip-tls-verify=true
+      changed_when: true
+
+    - name: Determine which users are instructors
+      ansible.builtin.set_fact:
+        _active_instructor_users: >-
+          {{ instructor_users if (instructor_users | length > 0)
+             else (cluster_users | dict2items | map(attribute='key') | sort | list) }}
+
+    - name: Build instructor list
+      ansible.builtin.set_fact:
+        instructors: >-
+          {{ instructors | default([]) + [{
+            'name': item,
+            'password': cluster_users[item].password,
+            'ctfd_ns': item ~ '-' ~ ctfd_ns_suffix,
+            'lab_ns': item ~ '-' ~ lab_ns_suffix
+          }] }}
+      loop: "{{ _active_instructor_users }}"
+
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg: >-
+          Deploying for {{ instructors | length }} instructors
+          ({{ instructors | map(attribute='name') | join(', ') }})
+          on {{ cluster_api_url }}
+          (apps: {{ cluster_apps_domain }})
+
+  tasks:
+    # ── Phase 0: Cluster-wide setup ──────────────────────────────
+    - name: "Phase 0: Cluster-wide operator and service setup"
+      ansible.builtin.include_role:
+        name: cluster_setup
+
+    - name: "Phase 0: Deploy shared Gitea instance"
+      ansible.builtin.include_role:
+        name: shared_gitea
+
+    # ── Phase 1: Per-instructor infrastructure ───────────────────
+    - name: "Phase 1: Deploy per-instructor infrastructure"
+      ansible.builtin.include_role:
+        name: instructor
+      loop: "{{ instructors }}"
+      loop_control:
+        loop_var: instructor
+        label: "{{ instructor.name }}"
+
+    # ── Phase 2: Post-deploy configuration (services) ──────────────
+    - name: "Phase 2: Configure Gitea users and repos"
+      ansible.builtin.include_role:
+        name: configure_gitea
+
+    - name: "Phase 2: Build and upload CTFd archives"
+      ansible.builtin.include_role:
+        name: configure_ctfd
+
+    # ── Phase 3: VMs (CNV operator should be ready by now) ───────
+    - name: "Phase 3: Provision instructor VMs"
+      ansible.builtin.include_tasks: roles/instructor/tasks/vms.yml
+      loop: "{{ instructors }}"
+      loop_control:
+        loop_var: instructor
+        label: "{{ instructor.name }}"
+
+    # ── Phase 4: AAP configuration (needs VMs to be submitted) ───
+    - name: "Phase 4: Configure AAP inventories and credentials"
+      ansible.builtin.include_role:
+        name: configure_aap
+
+    # ── Phase 3: Instructor handouts ─────────────────────────────
+    - name: Build per-instructor handout data
+      ansible.builtin.set_fact:
+        _handouts: >-
+          {{ _handouts | default({}) | combine({
+            item.name: {
+              'instructor': {
+                'username': item.name,
+                'password': item.password
+              },
+              'urls': {
+                'ctfd': 'https://island-' ~ item.ctfd_ns ~ '.' ~ cluster_apps_domain,
+                'gitea': 'https://gitea-' ~ gitea_namespace ~ '.' ~ cluster_apps_domain,
+                'aap': aap_url,
+                'devspaces': 'https://devspaces.' ~ cluster_apps_domain,
+                'verifier': 'https://verifier-' ~ item.ctfd_ns ~ '.' ~ cluster_apps_domain,
+                'ocp_console': cnv_claim.status.summary.provision_data.openshift_console_url
+              },
+              'aap_org': item.name,
+              'managed_node': item.name ~ '-node.' ~ item.lab_ns ~ '.svc.cluster.local'
+            }
+          }) }}
+      loop: "{{ instructors }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Publish handout data via set_stats
+      ansible.builtin.set_stats:
+        data:
+          island_adventure: "{{ _handouts }}"
+        per_host: false
+
+    - name: Display per-instructor handouts
+      ansible.builtin.debug:
+        msg: |
+          ══════════════════════════════════════════════════════════
+           🏴‍☠️  {{ inst.name | upper }} — Ansible Island Adventure
+          ══════════════════════════════════════════════════════════
+
+          OpenShift Console: {{ _handouts[inst.name].urls.ocp_console }}
+          CTFd (Challenges): {{ _handouts[inst.name].urls.ctfd }}
+          Gitea (Git repos):  {{ _handouts[inst.name].urls.gitea }}
+          AAP (Automation):   {{ _handouts[inst.name].urls.aap }}
+            Organization: {{ inst.name }}
+          Dev Spaces (IDE):   {{ _handouts[inst.name].urls.devspaces }}
+          Verifier:           {{ _handouts[inst.name].urls.verifier }}
+          Managed Node:       {{ _handouts[inst.name].managed_node }}
+
+          Login (all services): {{ inst.name }} / {{ inst.password }}
+
+          ══════════════════════════════════════════════════════════
+      loop: "{{ instructors }}"
+      loop_control:
+        loop_var: inst
+        label: "{{ inst.name }}"
+
+    - name: Deployment complete
+      ansible.builtin.debug:
+        msg: >-
+          Ansible Island Adventure deployed for {{ instructors | length }} instructors.
+          Handout data published via set_stats (key: island_adventure).

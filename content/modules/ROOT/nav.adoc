@@ -1,0 +1,8 @@
+* xref:index.adoc[Lab Overview]
+* xref:module-01-welcome-to-the-island.adoc[1. Welcome to the Island]
+* xref:module-02-prerequisites-and-logistics.adoc[2. Prerequisites and Logistics]
+* xref:module-03-play-the-game.adoc[3. Play the Game]
+* xref:module-04-explore-the-environment.adoc[4. Explore the Environment]
+* xref:module-05-customize-and-extend.adoc[5. Customize and Extend]
+* xref:module-06-from-event-to-pipeline.adoc[6. From Event to Pipeline]
+* xref:conclusion.adoc[Conclusion]

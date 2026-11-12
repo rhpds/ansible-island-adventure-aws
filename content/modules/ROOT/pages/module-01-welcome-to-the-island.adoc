@@ -1,0 +1,81 @@
+= Welcome to the Island
+:navtitle: 1. Welcome to the Island
+
+Allow *10 minutes* for this overview. Modules 1 and 2 introduce the event; Module 3 lets you play as a participant before learning the administration workflow.
+
+== Introduction to Ansible Island Adventure
+
+Ansible Island Adventure is a gamified *Capture the Flag (CTF)* competition built around Red Hat Ansible Automation Platform.
+Wrapped in a pirate-themed narrative, participants solve challenges that exercise real Ansible skills — from basic CLI commands to orchestrating workloads through the Automation Controller.
+
+The event is already built and *proven with customers*.
+This lab teaches you how to use it, deliver it, and customize it for your own engagements.
+
+== The Customer Experience
+
+When a customer attends an Ansible Island Adventure event, the experience follows this flow:
+
+. *Registration* — Participants receive a handout with their login credentials, shortened URLs, and a brief overview of the event.
+. *Access CTFd* — They log into the CTFd scoring platform using the credentials on their handout.
+. *Work through challenges* — Challenges are organized into categories of increasing difficulty. Each completed challenge yields a _flag_ that participants submit to CTFd for points.
+. *Leaderboard competition* — A live leaderboard drives friendly competition and keeps energy high throughout the event.
+. *Debrief* — Facilitators recap the challenges and connect the experience to Ansible Automation Platform capabilities.
+
+Plan for *1–1.5 hours* for the customer-facing event, with *30–45 minutes of challenges and a strict 45-minute challenge limit*. Schedule additional networking and extended debrief time afterward. Participants are not expected to finish every challenge.
+
+== Challenge Categories and Difficulty Tiers
+
+Challenges are organized into six categories that progressively build Ansible skills:
+
+[cols="1,2,1",options="header"]
+|===
+| Category | Description | Skill Level
+
+| *Warm Up*
+| Account setup, find Ansible documentation and collections
+| Beginner
+
+| *Let's Get Started*
+| Discover Ansible core and AAP versions in the environment
+| Beginner
+
+| *At the Beach*
+| Clone repos from Gitea, run playbooks from CLI, decrypt Vault secrets
+| Intermediate
+
+| *Treasure Hunt*
+| Create projects in AAP Controller, configure credentials, build job templates, deploy a web app
+| Intermediate–Advanced
+
+| *Side Quest*
+| Play the Ansible Quest interactive video game
+| Fun / Exploration
+
+| *Trivia*
+| Test knowledge of Ansible history and ecosystem
+| All levels
+|===
+
+This progression ensures participants at *every skill level* stay engaged:
+
+* Beginners can complete Warm Up and Let's Get Started challenges and feel accomplishment.
+* Experienced practitioners push through Treasure Hunt and the advanced verifier-based challenges.
+* Everyone enjoys Side Quest and Trivia as a change of pace.
+
+== Why Gamification Works
+
+Traditional workshops follow a linear, instructor-led format. Gamification changes the dynamic:
+
+* *Self-paced* — Participants move at their own speed. Fast learners aren't bored; beginners aren't left behind.
+* *Intrinsic motivation* — Points, hints, and the leaderboard create engagement without requiring constant instructor direction.
+* *Hands-on by default* — Every point requires doing something real on the platform. There is no passive observation.
+* *Memorable* — The pirate theme and competitive element make the event memorable. Customers talk about it afterward.
+
+When paired with follow-up (covered in Module 6), an Ansible Island Adventure event becomes a *pipeline generation tool* — not just a workshop.
+
+== Key Takeaways
+
+* Ansible Island Adventure is a proven, customer-facing CTF event built around Red Hat Ansible Automation Platform.
+* The pirate-themed narrative and gamified challenge structure drive higher engagement than traditional workshops.
+* Multiple difficulty tiers ensure participants at all skill levels — from beginners to experts — stay engaged.
+* The event is already built; this lab teaches you how to deliver and customize it independently.

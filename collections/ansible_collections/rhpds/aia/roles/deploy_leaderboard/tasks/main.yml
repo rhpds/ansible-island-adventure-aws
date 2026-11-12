@@ -1,0 +1,118 @@
+---
+# rhpds.aia.deploy_leaderboard — Deploy Ansible Island Adventure cluster services.
+# Deploys: AAP, Dev Spaces, Gitea, per-instructor CTFd, per-instructor AAP orgs.
+# Does NOT deploy VMs or OpenShift Virtualization — that's deploy_vms.
+
+- name: Load leaderboard environment
+  ansible.builtin.include_tasks: load_env.yml
+
+- name: Login to OpenShift as cluster-admin
+  ansible.builtin.command:
+    argv:
+      - oc
+      - login
+      - "{{ aia_cluster_api_url }}"
+      - "--username={{ aia_cluster_admin_username }}"
+      - "--password={{ aia_cluster_admin_password }}"
+      - --insecure-skip-tls-verify=true
+  changed_when: true
+
+# ── Phase 0: Operators + shared services ─────────────────────────
+- name: Deploy cluster operators and shared services
+  ansible.builtin.include_tasks: cluster_setup.yml
+
+- name: Deploy shared Gitea
+  ansible.builtin.include_tasks: shared_gitea.yml
+
+# ── Phase 1: Per-instructor infrastructure ───────────────────────
+- name: Deploy per-instructor resources
+  ansible.builtin.include_tasks: per_instructor.yml
+  loop: "{{ aia_instructors }}"
+  loop_control:
+    loop_var: instructor
+    label: "{{ instructor.name }}"
+
+# ── Phase 2: Service configuration ──────────────────────────────
+- name: Configure Gitea users and repos
+  ansible.builtin.include_tasks: configure_gitea.yml
+
+- name: Build and upload CTFd archives
+  ansible.builtin.include_tasks: configure_ctfd.yml
+
+# ── Phase 3: Handouts ───────────────────────────────────────────
+- name: Build per-instructor handout data
+  ansible.builtin.set_fact:
+    _handouts: >-
+      {{ _handouts | default({}) | combine({
+        item.name: {
+          'instructor': {
+            'username': item.name,
+            'password': item.password
+          },
+          'urls': {
+            'ctfd': 'https://island-' ~ item.ctfd_ns ~ '.' ~ aia_cluster_apps_domain,
+            'gitea': 'https://gitea-' ~ aia_gitea_namespace ~ '.' ~ aia_cluster_apps_domain,
+            'aap': aia_aap_url,
+            'devspaces': 'https://devspaces.' ~ aia_cluster_apps_domain,
+            'verifier': 'https://verifier-' ~ item.ctfd_ns ~ '.' ~ aia_cluster_apps_domain,
+            'ocp_console': 'https://console-openshift-console.' ~ aia_cluster_apps_domain
+          },
+          'aap_org': item.name,
+          'managed_node': item.name ~ '-node.' ~ item.lab_ns ~ '.svc.cluster.local'
+        }
+      }) }}
+  loop: "{{ aia_instructors }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Publish handout data via set_stats
+  ansible.builtin.set_stats:
+    data:
+      island_adventure: "{{ _handouts }}"
+      aia_aap_url: "{{ aia_aap_url }}"
+      aia_aap_admin_password: "{{ aia_aap_admin_password }}"
+    per_host: false
+
+- name: Write deploy output to local file
+  ansible.builtin.copy:
+    content: "{{ _deploy_output | to_nice_json }}"
+    dest: "{{ playbook_dir }}/../deploy-output.json"
+    mode: "0600"
+  vars:
+    _deploy_output:
+      deployed_at: "{{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }}"
+      cluster_apps_domain: "{{ aia_cluster_apps_domain }}"
+      aap_url: "{{ aia_aap_url }}"
+      aap_admin_password: "{{ aia_aap_admin_password }}"
+      gitea_url: "https://gitea-{{ aia_gitea_namespace }}.{{ aia_cluster_apps_domain }}"
+      devspaces_url: "https://devspaces.{{ aia_cluster_apps_domain }}"
+      ocp_console: "https://console-openshift-console.{{ aia_cluster_apps_domain }}"
+      instructors: "{{ aia_instructors }}"
+      handouts: "{{ _handouts }}"
+
+- name: Display per-instructor handouts
+  ansible.builtin.debug:
+    msg: |
+      ══════════════════════════════════════════════════════════
+       🏴‍☠️  {{ inst.name | upper }} — Ansible Island Adventure
+      ══════════════════════════════════════════════════════════
+
+      CTFd (Challenges): {{ _handouts[inst.name].urls.ctfd }}
+      Gitea (Git repos):  {{ _handouts[inst.name].urls.gitea }}
+      AAP (Automation):   {{ _handouts[inst.name].urls.aap }}
+        Organization: {{ inst.name }}
+      Dev Spaces (IDE):   {{ _handouts[inst.name].urls.devspaces }}
+
+      Login (all services): {{ inst.name }} / {{ inst.password }}
+
+      ══════════════════════════════════════════════════════════
+  loop: "{{ aia_instructors }}"
+  loop_control:
+    loop_var: inst
+    label: "{{ inst.name }}"
+
+- name: Leaderboard deployment complete
+  ansible.builtin.debug:
+    msg: >-
+      Ansible Island Adventure leaderboard deployed for {{ aia_instructors | length }} instructors.
+      AAP: {{ aia_aap_url }}

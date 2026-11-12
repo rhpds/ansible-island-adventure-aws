@@ -1,0 +1,11 @@
+---
+- name: Configure the instructor's managed-node inventory and Machine credential
+  aia_aap_student:
+    url: "{{ aia_student.aap_url }}"
+    username: "{{ aia_student.aap_username }}"
+    password: "{{ aap_password }}"
+    guid: "{{ guid }}"
+    node: "{{ aia_managed_node }}"
+    validate_certs: "{{ aia_validate_certs | default(true) }}"
+    rotate_credential: "{{ aia_rotate_machine_credential | default(false) }}"
+  register: aia_aap_access

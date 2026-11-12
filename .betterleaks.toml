@@ -1,0 +1,21 @@
+# Project-specific betterleaks configuration
+# https://github.com/betterleaks/betterleaks#configuration
+#
+# Extends the default ruleset (350+ rules) with project-specific overrides.
+
+title = "project betterleaks config"
+
+[extend]
+useDefault = true
+
+# Paths to skip during scanning (regex patterns matched against file paths)
+[allowlist]
+paths = [
+  '''\.betterleaks\.toml''',
+  '''\.pre-commit-config\.yaml''',
+]
+
+# Uncomment to add inline allowlist patterns (matched against line content)
+# regexes = [
+#   '''example-secret-for-testing''',
+# ]

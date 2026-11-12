@@ -1,0 +1,26 @@
+name: modules
+title: "Ansible Island Adventure: Facilitator Training"
+version: ~
+nav:
+  - modules/ROOT/nav.adoc
+
+asciidoc:
+  attributes:
+    experimental: true
+    page-pagination: true
+    guid: '%GUID%'
+    ocp_console_url: '%ocp_console_url%'
+    ctfd_url: '%ctfd_url%'
+    gitea_url: '%gitea_url%'
+    aap_url: '%aap_url%'
+    devspaces_url: '%devspaces_url%'
+    verifier_url: '%verifier_url%'
+    ctfd_admin_username: '%ctfd_admin_username%'
+    ctfd_student_username: '%ctfd_student_username%'
+    gitea_username: '%gitea_username%'
+    aap_username: '%aap_username%'
+    keycloak_username: '%keycloak_username%'
+    user: '%user%'
+    password: '%password%'
+    apps_domain: '%apps_domain%'
+    managed_node: '%managed_node%'

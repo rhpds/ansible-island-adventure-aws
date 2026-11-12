@@ -1,0 +1,166 @@
+---
+# Deploy a RHEL VM per instructor using OpenShift Virtualization.
+# The CNV operator was submitted in Phase 0; by now it should be ready.
+
+- name: "{{ instructor.name }} — Wait for CNV operator to be ready"
+  kubernetes.core.k8s_info:
+    api_version: operators.coreos.com/v1alpha1
+    kind: ClusterServiceVersion
+    namespace: openshift-cnv
+  register: _cnv_csv
+  until: >-
+    _cnv_csv.resources | selectattr('metadata.name', 'match', '^kubevirt-hyperconverged') | list | length > 0 and
+    (_cnv_csv.resources | selectattr('metadata.name', 'match', '^kubevirt-hyperconverged') | list)[0].status.phase | default('') == 'Succeeded'
+  retries: 60
+  delay: 15
+  run_once: true
+
+- name: "{{ instructor.name }} — Deploy HyperConverged CR (once)"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: hco.kubevirt.io/v1beta1
+      kind: HyperConverged
+      metadata:
+        name: kubevirt-hyperconverged
+        namespace: openshift-cnv
+      spec:
+        infra: {}
+        workloads: {}
+  run_once: true
+
+- name: "{{ instructor.name }} — Wait for KubeVirt to be available"
+  kubernetes.core.k8s_info:
+    api_version: hco.kubevirt.io/v1beta1
+    kind: HyperConverged
+    name: kubevirt-hyperconverged
+    namespace: openshift-cnv
+  register: _hco
+  until: >-
+    _hco.resources | length > 0 and
+    (_hco.resources[0].status.conditions | default([])
+      | selectattr('type', 'equalto', 'Available')
+      | selectattr('status', 'equalto', 'True')
+      | list | length > 0)
+  retries: 60
+  delay: 15
+  run_once: true
+
+# ── Determine minimum disk size from source image ────────────────
+- name: "{{ instructor.name }} — Look up source image snapshot size"
+  block:
+    - name: Get DataSource details
+      kubernetes.core.k8s_info:
+        api_version: cdi.kubevirt.io/v1beta1
+        kind: DataSource
+        name: "{{ vm_image_source }}"
+        namespace: openshift-virtualization-os-images
+      register: _ds
+
+    - name: Get VolumeSnapshot restore size
+      kubernetes.core.k8s_info:
+        api_version: snapshot.storage.k8s.io/v1
+        kind: VolumeSnapshot
+        name: "{{ _ds.resources[0].status.source.snapshot.name }}"
+        namespace: openshift-virtualization-os-images
+      register: _snap
+
+    - name: Set VM disk size (at least source image size)
+      ansible.builtin.set_fact:
+        _vm_disk_size: "{{ _snap.resources[0].status.restoreSize }}"
+  run_once: true
+
+# ── Create the instructor's VM ───────────────────────────────────
+- name: "{{ instructor.name }} — Create VirtualMachine"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        name: "{{ instructor.name }}-node"
+        namespace: "{{ instructor.lab_ns }}"
+        labels:
+          app: "{{ instructor.name }}-node"
+          island-adventure/instructor: "{{ instructor.name }}"
+      spec:
+        running: true
+        template:
+          metadata:
+            labels:
+              app: "{{ instructor.name }}-node"
+              kubevirt.io/domain: "{{ instructor.name }}-node"
+          spec:
+            domain:
+              cpu:
+                cores: 1
+              memory:
+                guest: 2Gi
+              devices:
+                disks:
+                  - name: rootdisk
+                    disk:
+                      bus: virtio
+                  - name: cloudinit
+                    disk:
+                      bus: virtio
+                interfaces:
+                  - name: default
+                    masquerade: {}
+            networks:
+              - name: default
+                pod: {}
+            volumes:
+              - name: rootdisk
+                dataVolume:
+                  name: "{{ instructor.name }}-rootdisk"
+              - name: cloudinit
+                cloudInitNoCloud:
+                  userData: |
+                    #cloud-config
+                    user: {{ vm_ssh_user }}
+                    password: {{ instructor.password }}
+                    chpasswd:
+                      expire: false
+                    ssh_pwauth: true
+                    packages:
+                      - python3
+                      - openssh-server
+                    runcmd:
+                      - systemctl enable --now sshd
+        dataVolumeTemplates:
+          - metadata:
+              name: "{{ instructor.name }}-rootdisk"
+            spec:
+              sourceRef:
+                kind: DataSource
+                name: "{{ vm_image_source }}"
+                namespace: openshift-virtualization-os-images
+              storage:
+                accessModes: [ReadWriteOnce]
+                resources:
+                  requests:
+                    storage: "{{ _vm_disk_size }}"
+
+- name: "{{ instructor.name }} — Create VM Service"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: "{{ instructor.name }}-node"
+        namespace: "{{ instructor.lab_ns }}"
+      spec:
+        selector:
+          app: "{{ instructor.name }}-node"
+        ports:
+          - name: ssh
+            port: 22
+            targetPort: 22
+
+- name: "{{ instructor.name }} — Report VM submitted"
+  ansible.builtin.debug:
+    msg: >-
+      VM {{ instructor.name }}-node submitted in {{ instructor.lab_ns }}.
+      SSH: {{ vm_ssh_user }}@{{ instructor.name }}-node.{{ instructor.lab_ns }}.svc.cluster.local

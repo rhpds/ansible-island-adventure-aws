@@ -1,0 +1,13 @@
+count: 2
+results:
+  - id: 1
+    type: standard
+    location: 7c4d437d1dc2b13816fe3f71d8361708/catalyst-logo.png
+    challenge_id: null
+    page_id: null
+  - id: 2
+    type: standard
+    location: ca8dfa1ec30485b5a9ee8d823ad9c62f/Red_Hat_logo.svg.png
+    challenge_id: null
+    page_id: null
+meta: {}

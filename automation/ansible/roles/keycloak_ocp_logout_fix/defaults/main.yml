@@ -1,0 +1,13 @@
+---
+# Keycloak connection
+keycloak_admin_console: "https://sso.{{ cluster_apps_domain }}"
+keycloak_admin_user: temp-admin
+keycloak_admin_password: ""
+keycloak_realm: sso
+
+# The clientId registered in Keycloak for OpenShift OAuth
+# Set to empty to auto-discover any client whose clientId contains 'openshift'
+keycloak_ocp_client_id: ""
+
+# The OCP OAuth logout endpoint — set automatically from cluster_apps_domain
+keycloak_ocp_logout_url: "https://oauth-openshift.{{ cluster_apps_domain }}/logout"

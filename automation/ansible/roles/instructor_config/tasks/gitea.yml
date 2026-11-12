@@ -1,0 +1,111 @@
+---
+# Create instructor Gitea users, migrate repos, and fork them.
+
+- name: Set Gitea API base URL
+  ansible.builtin.set_fact:
+    _gitea_api: "{{ gitea_url }}/api/v1"
+
+# ── Per-instructor users and repos ───────────────────────────────
+- name: Create instructor Gitea users
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/admin/users"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ instructor.name }}"
+      password: "{{ instructor.password }}"
+      email: "{{ instructor.name }}@island.local"
+      must_change_password: false
+      login_name: "{{ instructor.name }}"
+      source_id: 0
+    user: "{{ gitea_admin_user }}"
+    password: "{{ gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [201, 422]
+
+
+- name: Update instructor Gitea passwords
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/admin/users/{{ instructor.name }}"
+    method: PATCH
+    body_format: json
+    body:
+      password: "{{ instructor.password }}"
+      login_name: "{{ instructor.name }}"
+      source_id: 0
+    user: "{{ gitea_admin_user }}"
+    password: "{{ gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+
+
+# ── Ensure repos exist under starter account (migrate if missing) ─
+- name: Check if repos exist under starter account
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/repos/starter/{{ item.name }}"
+    method: GET
+    user: "{{ gitea_admin_user }}"
+    password: "{{ gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200, 404]
+  loop: "{{ instructor_repos }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _repo_checks
+
+- name: Migrate missing repos from GitHub into starter account
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/repos/migrate"
+    method: POST
+    body_format: json
+    body:
+      clone_addr: "{{ item.item.url }}"
+      repo_name: "{{ item.item.name }}"
+      repo_owner: "starter"
+      mirror: false
+      private: false
+      service: git
+    user: "{{ gitea_admin_user }}"
+    password: "{{ gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [201, 409]
+  loop: "{{ _repo_checks.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: item.status == 404
+
+
+# ── Fork repos into instructor's account ─────────────────────────
+- name: Fork repos into instructor's account
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/repos/starter/{{ item.name }}/forks"
+    method: POST
+    body_format: json
+    body: {}
+    user: "{{ gitea_admin_user }}"
+    password: "{{ gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    headers:
+      Sudo: "{{ instructor.name }}"
+    status_code: [202, 409]
+  loop: "{{ instructor_repos }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+
+- name: "{{ instructor.name }} — Publish Gitea info"
+  agnosticd.core.agnosticd_user_info:
+    msg: |
+      Gitea (Source Control):
+        URL:      {{ gitea_url }}
+        Username: {{ instructor.name }}
+        Password: {{ instructor.password }}
+    data:
+      gitea_url: "{{ gitea_url }}"
+      gitea_username: "{{ instructor.name }}"
+      gitea_password: "{{ instructor.password }}"

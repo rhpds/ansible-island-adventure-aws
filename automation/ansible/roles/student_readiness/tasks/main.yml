@@ -1,0 +1,27 @@
+---
+# AWS catalog adapter: use the EC2 public endpoint; no CNV NodePort assumptions.
+- name: Configure and validate this catalog student's runtime access
+  vars:
+    aia_managed_node:
+      host: "{{ aia_aws_managed_node_host }}"
+      port: "{{ aia_aws_managed_node_port | default(22) | int }}"
+      username: "{{ control_user_name | default(student_name) }}"
+      password: "{{ control_user_password | default(common_password) }}"
+    aia_student:
+      aap_url: "{{ aap_url }}"
+      aap_username: "{{ instructor.name }}"
+      ctfd_url: "https://island-{{ instructor.name }}-ctfd.{{ openshift_cluster_ingress_domain }}"
+      devspaces_url: "https://devspaces.{{ openshift_cluster_ingress_domain }}"
+      managed_node_web_url: "{{ aia_aws_managed_node_web_url }}"
+    aap_password: "{{ instructor.password }}"
+    aia_readiness_publish_user_info: true
+  block:
+    - name: Prepare the personal AAP inventory and Machine credential
+      block:
+        - name: Configure personal managed-node access
+          ansible.builtin.include_role:
+            name: configure_student_aap
+      always:
+        - name: Measure and publish resource connectivity even when setup fails
+          ansible.builtin.include_role:
+            name: validate_connectivity

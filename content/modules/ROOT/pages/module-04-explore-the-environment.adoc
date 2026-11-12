@@ -1,0 +1,176 @@
+= Explore the Environment
+:navtitle: 4. Explore the Environment
+:page-aliases: module-03-explore-the-environment.adoc
+
+Allow *20 minutes*: approximately *5 minutes for the architecture tour*, *7 minutes for the instructor workspace, OpenShift login, and vault setup*, and *8 minutes for the playbook walkthrough, reset, and verification*.
+
+You have played as a participant in Module 3. Now switch to administering your own training board. Keep the score and challenge notes you saved; the controlled reset below removes that board's game progress.
+
+== Architecture Tour on OpenShift
+
+Each learner has a personal CTFd instance for this facilitator-training lab.
+Keep your player browser session available. Open a private browser window for CTFd administration and sign in there as `{ctfd_admin_username}` with your provisioned lab password.
+
+=== Log into the OpenShift Console
+
+. Open the OpenShift Console: {ocp_console_url}
+. Log in with your instructor credentials: `{keycloak_username}` / `{password}`.
+. Open your username menu and select *Copy login command*. Authenticate if requested, then select *Display Token*.
+. Keep the generated `oc login` command and token privately for your Dev Spaces terminal. Treat the token as a password; do not put it in Git, screenshots, or shared notes. Generate a new token here if it expires.
+
+=== Identify Running Services
+
+From *Workloads → Pods*, explore the services visible to your account:
+
+[cols="1,2,2",options="header"]
+|===
+| Service | Location | Purpose
+| *CTFd, MariaDB, Redis* | `{keycloak_username}-ctfd` | Your scoring platform, database, and cache
+| *Gitea* | `gitea` | Shared Git hosting; your repositories belong to `{gitea_username}`
+| *AAP Controller* | Shared AAP namespace | Your organization and automation resources
+| *Dev Spaces* | `openshift-devspaces` (platform); your user workspace namespace | IDE and workspace containers
+| *Managed Node VM* | Student environment | RHEL 9 VM for Ansible challenges, provisioned separately
+|===
+
+[NOTE]
+====
+The shared `gitea` namespace is restricted to platform administrators. It is normal for your instructor account to receive "Forbidden" or not see this namespace. Access your repositories through the Gitea web interface below. Other shared platform namespaces may also be hidden; inspect your own `{keycloak_username}-ctfd` namespace for CTFd pods.
+====
+
+=== Verify Service Access
+
+Open each service and confirm you can log in:
+
+[cols="1,2",options="header"]
+|===
+| Service | URL
+| CTFd | {ctfd_url}
+| Gitea | {gitea_url}
+| AAP | {aap_url}
+| Dev Spaces | {devspaces_url}
+| OpenShift Console | {ocp_console_url}
+|===
+
+include::partial$service-access.adoc[]
+
+== Open the Instructor Workspace
+
+. Save your work in the `ansible-survival-kit` workspace from Module 3. In Gitea, open your *`aia-instructor`* repository under your own account. This second repository contains the event administration toolkit.
+. The lab supports *two running workspaces with separate persistent storage*. Keep the survival-kit workspace available while opening the instructor workspace. For an older environment that allows only one workspace or shares storage between workspaces, ask the organizer to update the policy; stop the survival-kit workspace before starting another one if necessary. Back up local changes before recreating older workspaces.
+. Click *Code → HTTPS* and copy the clone URL. Your URL has this form:
++
+[source,text,subs="attributes"]
+----
+{gitea_url}/{gitea_username}/aia-instructor.git
+----
+. Open {devspaces_url} and select *Log in with OpenShift* if prompted. Use your instructor account and allow the Dev Spaces access request. Select *Create Workspace* and paste that HTTPS URL.
+. Leave *Temporary Storage* off and select *Create & Open*. Use the repository's `.devfile.yaml`. When asked "Do you trust the authors of this repository?", select *Continue*. Wait for the editor and any collection-installation startup task to finish. The devfile supplies Ansible, Lint, Navigator, and related utilities.
+. If Git requests authentication, use `{gitea_username}` and your provisioned lab password.
+. Open *Terminal → New Terminal* and verify the tools:
++
+[source,bash]
+----
+ansible --version
+ansible-lint --version
+ansible-navigator --version
+----
+. Paste the `oc login` command saved from the OpenShift console into this terminal. Run `oc whoami` and confirm it reports your instructor account. This terminal login is used by the administration playbooks.
+
+=== Configure Your Vault Password
+
+Your instructor repository's encrypted `roles/ctfd/vars/flags.yml` uses *your provisioned lab password*, the same password shown in your service access details. It is separate from your OpenShift login token.
+
+In the workspace terminal, prepare the password file:
+
+[source,bash]
+----
+cd /projects/aia-instructor
+umask 077
+vim .vault-password
+----
+
+Enter only your provisioned lab password on one line, then save and exit. Verify it:
+
+[source,bash]
+----
+chmod 600 .vault-password
+ansible-vault view roles/ctfd/vars/flags.yml
+----
+
+The instructor devfile sets `ANSIBLE_VAULT_PASSWORD_FILE` to `/projects/aia-instructor/.vault-password`. Keep this file local to your workspace; never commit it or include it in an image. A newly created workspace may require this setup again.
+
+If you are resuming an existing instructor workspace after an organizer update, save your edits and run `git pull --ff-only` in `/projects/aia-instructor` to fetch the current toolkit before continuing.
+
+== Deployment Artifacts Walkthrough
+
+Open *`deploy.yml` at the root of your Gitea `aia-instructor` repository*. Follow its shared tasks and content runner:
+
+[source,text]
+----
+aia-instructor/
+  ├── deploy.yml                  → Reset your board's challenge progress
+  ├── update-challenges.yml       → Update content while retaining progress
+  ├── generate-handouts.yml       → Generate service links and usernames
+  ├── tasks/
+  │   ├── discover.yml            → Find your board using oc whoami
+  │   └── content.yml             → Run content operations in your CTFd pod
+  ├── files/ctfd_content.py        → Validate and apply challenge definitions
+  └── roles/ctfd/vars/
+      ├── challenges.yml
+      ├── challenges_advanced.yml
+      └── flags.yml               → Vault-encrypted answers
+----
+
+The playbooks use your current `oc login` and local vault password. They discover your personal CTFd namespace from your instructor username and verify its route. They manage challenge content inside your CTFd pod using the permissions already assigned to your account. Infrastructure, accounts, passwords, and event settings are retained.
+
+=== Preview and Reset Your Training Board
+
+First validate the toolkit syntax:
+
+[source,bash]
+----
+cd /projects/aia-instructor
+ansible-playbook deploy.yml --syntax-check
+----
+
+[WARNING]
+====
+Running `deploy.yml` clears *your board's solves, submissions, awards, and purchased hints*, then applies the challenge definitions. It retains accounts, passwords, profile changes, event settings, and challenge IDs. It does not recreate the catalog items or reset your VM, AAP resources, or Dev Spaces workspaces.
+
+This is a deliberate reset of your own training board *after* the practice game. For a customer event, reset before participants begin; never reset an active competition. Keep your Module 3 results before continuing.
+====
+
+Preview the reset from the repository root:
+
+[source,bash]
+----
+ansible-playbook deploy.yml --check
+----
+
+Check that the reported username and CTFd URL match your own board. Then apply the reset:
+
+[source,bash]
+----
+ansible-playbook deploy.yml
+----
+
+If discovery fails, check `oc whoami` and refresh your personal login token; contact the organizer if your namespace or CTFd pod is missing.
+
+=== Observe What Changed
+
+. Refresh your player CTFd window. Compare your score and solves with the results saved in Module 3: progress has been cleared and the challenges are available again.
+. Confirm your accounts and profile changes remain. If you renamed your player account during the game, use that updated name or email when signing in again; its lab password is unchanged.
+. Check your survival-kit files and any AAP resources you created. They remain available. If you deployed Apache during gameplay, its web page also remains available: the board reset does not undo that automation.
+. As the player, complete *Write Your Name in the Sand* again and submit `DONE`. Keep this single solve for Module 5, where you will verify that a content update preserves it. Save your earlier gameplay notes separately for Module 6.
+
+== Preparing a Customer Event
+
+Allow adequate provisioning lead time, verify service access and challenge content, then distribute participant handouts. Normally participants share the customer event's CTFd board; the separate boards in this training lab let learners practice customization independently.
+
+== Key Takeaways
+
+* Use `ansible-survival-kit` for the participant experience in Module 3 and `aia-instructor` for administration and customization from this module onward.
+* Save your personal OpenShift login token and use it in your Dev Spaces terminal.
+* Inspect the root `deploy.yml`, its shared tasks, and the board it selects before running it.
+* A board reset clears game progress while retaining accounts and infrastructure. Use it before a new customer session or for this assigned training exercise.
+* Keep the new Warm Up solve for Module 5; use `update-challenges.yml` for content edits that retain progress.

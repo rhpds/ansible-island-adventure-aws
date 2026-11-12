@@ -1,0 +1,138 @@
+---
+# aap_controller_web_url: https://aap-aap.apps.cluster-8zwws.dyn.redhatworkshops.io
+# devspaces_url: https://devspaces.apps.cluster-8zwws.dyn.redhatworkshops.io
+# gitea_console_url: https://gitea.apps.cluster-8zwws.dyn.redhatworkshops.io
+# keycloak_admin_console: https://sso.apps.cluster-8zwws.dyn.redhatworkshops.io
+# openshift_api_server_url: https://api.cluster-8zwws.dyn.redhatworkshops.io:6443
+# sandbox_openshift_api_url: https://api.ocpv08.dal10.infra.demo.redhat.com:6443
+
+
+# openshift_cluster_ingress_domain: apps.cluster-8zwws.dyn.redhatworkshops.io
+# openshift_cluster_common_password:
+# keycloak_admin_user: temp-admin
+# keycloak_admin_password: ""
+# defaults for instructor_config
+# -------------------------------------------------------------------
+# Python interpreter
+# -------------------------------------------------------------------
+ansible_python_interpreter: /usr/bin/python3.11
+
+# -------------------------------------------------------------------
+# OCP Login
+# -------------------------------------------------------------------
+cluster_apps_domain: "{{ openshift_cluster_ingress_domain }}"
+ocp_api_url: "{{ openshift_api_server_url }}"
+ocp_admin_user: "admin"
+ocp_admin_password: "{{ openshift_cluster_common_password }}"
+openshift_client_download_url: >-
+  https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-4.21/openshift-client-linux.tar.gz
+
+# -------------------------------------------------------------------
+# Instructor vars
+# -------------------------------------------------------------------
+common_password: "{{ openshift_cluster_common_password }}"
+student_name: "lab-user"
+
+instructor:
+  name: "instructor-{{ guid }}"
+  ctfd_ns: "instructor-{{ guid }}-ctfd"
+  lab_ns: "instructor-{{ guid }}-lab"
+  password: "{{ common_password }}"
+
+# List of instructor dicts — each needs: name, password, ctfd_ns, lab_ns
+# instructors: []
+
+instructor_repos:
+  - url: https://github.com/l3acon/ansible-survival-kit.git
+    name: ansible-survival-kit
+  - url: https://github.com/l3acon/aia-instructor.git
+    name: aia-instructor
+
+# -------------------------------------------------------------------
+# AAP Configuration
+# -------------------------------------------------------------------
+aap_url: "https://aap-aap.{{ cluster_apps_domain }}"
+aap_admin_password: "{{ openshift_cluster_common_password }}"
+
+# -------------------------------------------------------------------
+# CTFd Configuration
+# -------------------------------------------------------------------
+ctfd_image: "ctfd/ctfd:3.7.7"
+ctfd_admin_username: admin
+ctfd_admin_password: "{{ common_password }}"
+ctfd_admin_email: admin@example.com
+ctfd_logs_pvc_size: 1Gi
+ctfd_uploads_pvc_size: 1Gi
+
+# Catalog bootstrap initializes settings/accounts without loading challenges.
+ctfd_bootstrap_timeout: 120
+ctfd_bootstrap_retries: 2
+ctfd_bootstrap_delay: 10
+
+# Used only by the explicit post-deployment content playbook.
+# Bound each oc exec attempt with GNU timeout (plus 5s before forced kill).
+# Retries are in addition to the initial attempt.
+ctfd_challenge_check_timeout: 120
+ctfd_challenge_check_retries: 2
+ctfd_challenge_check_delay: 10
+
+ctfd_challenges: []
+ctfd_challenges_advanced: []
+
+mysql_image: "mariadb:10.4.12"
+mysql_database: ctfd
+mysql_user: ctfd
+mysql_password: ctfd
+mysql_root_password: ctfd
+mysql_pvc_size: 1Gi
+
+redis_image: "redis:4"
+redis_pvc_size: 1Gi
+
+# -------------------------------------------------------------------
+# Verifier Configuration
+# -------------------------------------------------------------------
+instructor_config_deploy_verifier: false
+instructor_config_validate_connectivity: false
+verifier_image: "quay.io/rhpds/ansible-island-verifier:latest"
+verifier_hmac_secret: ""
+
+vm_ssh_user: lab-user
+
+# -------------------------------------------------------------------
+# Gitea Configuration
+# -------------------------------------------------------------------
+gitea_url: "https://gitea.{{ cluster_apps_domain }}"
+gitea_admin_user: admin
+gitea_admin_password: "{{ openshift_cluster_common_password }}"
+
+# -------------------------------------------------------------------
+# Keycloak Configuration
+# -------------------------------------------------------------------
+keycloak_admin_console: "https://sso.{{ cluster_apps_domain }}"
+# keycloak_admin_console: https://sso.apps.cluster-bnbsj.dyn.redhatworkshops.io
+keycloak_admin_user: temp-admin
+keycloak_admin_password: ""
+
+# -------------------------------------------------------------------
+# Resource Requests (lab-optimized)
+# -------------------------------------------------------------------
+resources:
+  mysql:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+  redis:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+  ctfd:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: '1', memory: 1Gi }
+  verifier:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 250m, memory: 256Mi }
+  gitea:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: '1', memory: 1Gi }
+  gitea_postgres:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }

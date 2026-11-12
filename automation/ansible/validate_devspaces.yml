@@ -1,0 +1,16 @@
+---
+# One exported inventory represents one shared leaderboard cluster.
+- name: Validate the Dev Spaces policy supplied by the leaderboard CI
+  hosts: aia_students
+  connection: local
+  gather_facts: false
+  any_errors_fatal: true
+  tags: [devspaces, devspaces_validation]
+  tasks:
+    - name: Check the shared workspace policy once per leaderboard inventory
+      ansible.builtin.include_role:
+        name: configure_devspaces
+        tasks_from: validate
+        apply:
+          tags: [devspaces, devspaces_validation]
+      run_once: true

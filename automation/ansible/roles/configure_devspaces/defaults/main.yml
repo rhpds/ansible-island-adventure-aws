@@ -1,0 +1,5 @@
+---
+aia_devspaces_namespace: openshift-devspaces
+aia_devspaces_name: devspaces
+aia_devspaces_running_workspaces_per_user: 2
+aia_devspaces_pvc_strategy: per-workspace

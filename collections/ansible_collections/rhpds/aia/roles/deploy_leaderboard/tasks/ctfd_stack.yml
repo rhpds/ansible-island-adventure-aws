@@ -1,0 +1,343 @@
+---
+# ── MariaDB ──────────────────────────────────────────────────────
+- name: "{{ instructor.name }} — Create MariaDB PVC"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: ctfd-mysql-pvc
+        namespace: "{{ instructor.ctfd_ns }}"
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: "{{ aia_mysql_pvc_size }}"
+
+- name: "{{ instructor.name }} — Deploy MariaDB"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ctfd-mysql
+        namespace: "{{ instructor.ctfd_ns }}"
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: ctfd-mysql
+        template:
+          metadata:
+            labels:
+              app: ctfd-mysql
+          spec:
+            containers:
+              - name: mariadb
+                image: "{{ aia_mysql_image }}"
+                env:
+                  - name: MYSQL_ROOT_PASSWORD
+                    value: "{{ aia_mysql_root_password }}"
+                  - name: MYSQL_DATABASE
+                    value: "{{ aia_mysql_database }}"
+                  - name: MYSQL_USER
+                    value: "{{ aia_mysql_user }}"
+                  - name: MYSQL_PASSWORD
+                    value: "{{ aia_mysql_password }}"
+                ports:
+                  - containerPort: 3306
+                resources: "{{ aia_resources.mysql }}"
+                volumeMounts:
+                  - name: data
+                    mountPath: /var/lib/mysql
+            volumes:
+              - name: data
+                persistentVolumeClaim:
+                  claimName: ctfd-mysql-pvc
+
+- name: "{{ instructor.name }} — Create MariaDB Service"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: ctfd-mysql
+        namespace: "{{ instructor.ctfd_ns }}"
+      spec:
+        selector:
+          app: ctfd-mysql
+        ports:
+          - port: 3306
+            targetPort: 3306
+
+# ── Redis ────────────────────────────────────────────────────────
+- name: "{{ instructor.name }} — Create Redis PVC"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: ctfd-redis-pvc
+        namespace: "{{ instructor.ctfd_ns }}"
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: "{{ aia_redis_pvc_size }}"
+
+- name: "{{ instructor.name }} — Deploy Redis"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ctfd-redis
+        namespace: "{{ instructor.ctfd_ns }}"
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: ctfd-redis
+        template:
+          metadata:
+            labels:
+              app: ctfd-redis
+          spec:
+            containers:
+              - name: redis
+                image: "{{ aia_redis_image }}"
+                ports:
+                  - containerPort: 6379
+                resources: "{{ aia_resources.redis }}"
+                volumeMounts:
+                  - name: data
+                    mountPath: /data
+            volumes:
+              - name: data
+                persistentVolumeClaim:
+                  claimName: ctfd-redis-pvc
+
+- name: "{{ instructor.name }} — Create Redis Service"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: ctfd-redis
+        namespace: "{{ instructor.ctfd_ns }}"
+      spec:
+        selector:
+          app: ctfd-redis
+        ports:
+          - port: 6379
+            targetPort: 6379
+
+# ── CTFd Application ────────────────────────────────────────────
+- name: "{{ instructor.name }} — Create CTFd logs PVC"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: ctfd-logs-pvc
+        namespace: "{{ instructor.ctfd_ns }}"
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: "{{ aia_ctfd_logs_pvc_size }}"
+
+- name: "{{ instructor.name }} — Create CTFd uploads PVC"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: ctfd-uploads-pvc
+        namespace: "{{ instructor.ctfd_ns }}"
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: "{{ aia_ctfd_uploads_pvc_size }}"
+
+- name: "{{ instructor.name }} — Deploy CTFd"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: ctfd
+        namespace: "{{ instructor.ctfd_ns }}"
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: ctfd
+        template:
+          metadata:
+            labels:
+              app: ctfd
+          spec:
+            containers:
+              - name: ctfd
+                image: "{{ aia_ctfd_image }}"
+                env:
+                  - name: DATABASE_URL
+                    value: "mysql+pymysql://{{ aia_mysql_user }}:{{ aia_mysql_password }}@ctfd-mysql/{{ aia_mysql_database }}"
+                  - name: REDIS_URL
+                    value: "redis://ctfd-redis:6379"
+                  - name: SECRET_KEY
+                    value: "{{ lookup('password', '/dev/null length=32 chars=hexdigits') | lower }}"
+                  - name: UPLOAD_FOLDER
+                    value: "/var/uploads"
+                  - name: LOG_FOLDER
+                    value: "/var/log/CTFd"
+                  - name: REVERSE_PROXY
+                    value: "true"
+                ports:
+                  - containerPort: 8000
+                resources: "{{ aia_resources.ctfd }}"
+                volumeMounts:
+                  - name: logs
+                    mountPath: /var/log/CTFd
+                  - name: uploads
+                    mountPath: /var/uploads
+            volumes:
+              - name: logs
+                persistentVolumeClaim:
+                  claimName: ctfd-logs-pvc
+              - name: uploads
+                persistentVolumeClaim:
+                  claimName: ctfd-uploads-pvc
+
+- name: "{{ instructor.name }} — Create CTFd Service"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: ctfd
+        namespace: "{{ instructor.ctfd_ns }}"
+      spec:
+        selector:
+          app: ctfd
+        ports:
+          - port: 8000
+            targetPort: 8000
+
+- name: "{{ instructor.name }} — Create CTFd Route"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: route.openshift.io/v1
+      kind: Route
+      metadata:
+        name: island
+        namespace: "{{ instructor.ctfd_ns }}"
+      spec:
+        host: "island-{{ instructor.ctfd_ns }}.{{ aia_cluster_apps_domain }}"
+        to:
+          kind: Service
+          name: ctfd
+        port:
+          targetPort: 8000
+        tls:
+          termination: edge
+          insecureEdgeTerminationPolicy: Redirect
+
+# ── Verifier ─────────────────────────────────────────────────────
+- name: "{{ instructor.name }} — Generate HMAC secret for verifier"
+  ansible.builtin.set_fact:
+    _verifier_hmac: >-
+      {{ aia_aia_verifier_hmac_secret if (aia_verifier_hmac_secret | length > 0)
+         else (lookup('password', '/dev/null length=32 chars=hexdigits') | lower) }}
+
+- name: "{{ instructor.name }} — Deploy Verifier"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: verifier
+        namespace: "{{ instructor.ctfd_ns }}"
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: verifier
+        template:
+          metadata:
+            labels:
+              app: verifier
+          spec:
+            containers:
+              - name: verifier
+                image: "{{ aia_verifier_image }}"
+                env:
+                  - name: VERIFIER_HMAC_SECRET
+                    value: "{{ _verifier_hmac }}"
+                  - name: VERIFIER_HOST_PATTERN
+                    value: "{{ instructor.name }}-node.{{ instructor.lab_ns }}.svc.cluster.local"
+                  - name: VERIFIER_SSH_USER_PATTERN
+                    value: "{{ aia_vm_ssh_user }}"
+                  - name: VERIFIER_SSH_PORT
+                    value: "22"
+                ports:
+                  - containerPort: 8080
+                resources: "{{ aia_resources.verifier }}"
+                volumeMounts:
+                  - name: players
+                    mountPath: /config
+            volumes:
+              - name: players
+                configMap:
+                  name: verifier-players
+                  optional: true
+
+- name: "{{ instructor.name }} — Create Verifier Service"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: verifier
+        namespace: "{{ instructor.ctfd_ns }}"
+      spec:
+        selector:
+          app: verifier
+        ports:
+          - port: 80
+            targetPort: 8080
+
+- name: "{{ instructor.name }} — Create Verifier Route"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: route.openshift.io/v1
+      kind: Route
+      metadata:
+        name: verifier
+        namespace: "{{ instructor.ctfd_ns }}"
+      spec:
+        host: "verifier-{{ instructor.ctfd_ns }}.{{ aia_cluster_apps_domain }}"
+        to:
+          kind: Service
+          name: verifier
+        port:
+          targetPort: 8080
+        tls:
+          termination: edge
+          insecureEdgeTerminationPolicy: Redirect

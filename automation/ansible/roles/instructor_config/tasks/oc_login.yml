@@ -1,0 +1,69 @@
+---
+- name: Check if oc is installed
+  ansible.builtin.command: which oc
+  register: _oc_check
+  changed_when: false
+  failed_when: false
+
+- name: Download and install oc CLI from cluster
+  when: _oc_check.rc != 0
+  block:
+    - name: Download oc tarball
+      ansible.builtin.get_url:
+        url: "{{ openshift_client_download_url }}"
+        dest: /tmp/oc.tar.gz
+        validate_certs: false
+        mode: "0644"
+
+    - name: Extract oc binary
+      ansible.builtin.unarchive:
+        src: /tmp/oc.tar.gz
+        dest: /usr/local/bin
+        remote_src: true
+        include:
+          - oc
+        mode: "0755"
+      become: true
+
+    - name: Remove oc tarball
+      ansible.builtin.file:
+        path: /tmp/oc.tar.gz
+        state: absent
+      become: true
+
+- name: Require an explicit exported kubeconfig path
+  ansible.builtin.assert:
+    that:
+      - aia_kubeconfig is string
+      - aia_kubeconfig | trim | length > 0
+    fail_msg: Supply the exported leaderboard kubeconfig path; an empty value must not select the control host's default cluster.
+  when: aia_kubeconfig is defined
+
+- name: Verify OpenShift access using the exported leaderboard kubeconfig
+  ansible.builtin.command:
+    argv:
+      - "{{ (_oc_check.stdout | trim) if _oc_check.rc == 0 else '/usr/local/bin/oc' }}"
+      - "--kubeconfig={{ aia_kubeconfig }}"
+      - --request-timeout=20s
+      - whoami
+  register: _aia_oc_access
+  changed_when: false
+  until: _aia_oc_access is succeeded
+  retries: 3
+  delay: 5
+  when: aia_kubeconfig is defined
+
+- name: Login to OCP cluster for catalog and legacy deployments
+  ansible.builtin.command:
+    argv:
+      - "{{ (_oc_check.stdout | trim) if _oc_check.rc == 0 else '/usr/local/bin/oc' }}"
+      - login
+      - "{{ ocp_api_url }}"
+      - "--username={{ ocp_admin_user }}"
+      - "--password={{ ocp_admin_password }}"
+      - --insecure-skip-tls-verify=true
+  environment:
+    PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
+  changed_when: false
+  no_log: true
+  when: aia_kubeconfig is not defined

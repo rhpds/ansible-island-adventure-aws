@@ -1,0 +1,68 @@
+---
+- name: "Environment Health Check"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - ../ansible-testing/vars/main.yml
+
+  pre_tasks:
+    - name: Load CNV resource claim
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../.cnv.env"
+        name: cnv_claim
+
+    - name: Extract cluster credentials
+      ansible.builtin.set_fact:
+        cluster_api_url: "{{ cnv_claim.status.summary.provision_data.openshift_api_url }}"
+        cluster_admin_token: "{{ cnv_claim.status.summary.provision_data.openshift_cluster_admin_token }}"
+        cluster_apps_domain: "{{ cnv_claim.status.summary.provision_data.openshift_cluster_ingress_domain }}"
+        cluster_users: "{{ cnv_claim.status.summary.provision_data.users }}"
+
+  tasks:
+    - name: "Check: OpenShift API is reachable"
+      ansible.builtin.uri:
+        url: "{{ cluster_api_url }}/healthz"
+        validate_certs: false
+        status_code: 200
+      register: ocp_health
+
+    - name: "Check: Gitea is responding"
+      ansible.builtin.uri:
+        url: "https://gitea-{{ gitea_namespace }}.{{ cluster_apps_domain }}/api/v1/version"
+        validate_certs: false
+        status_code: 200
+      register: gitea_health
+
+    - name: Build first instructor name
+      ansible.builtin.set_fact:
+        first_instructor: "{{ (cluster_users | dict2items | map(attribute='key') | sort | first) }}"
+
+    - name: "Check: CTFd is responding (first instructor)"
+      ansible.builtin.uri:
+        url: "https://island-{{ first_instructor }}-{{ ctfd_ns_suffix }}.{{ cluster_apps_domain }}"
+        validate_certs: false
+        status_code: 200
+        follow_redirects: safe
+      register: ctfd_health
+
+    - name: "Check: Dev Spaces is responding"
+      ansible.builtin.uri:
+        url: "https://devspaces.{{ cluster_apps_domain }}"
+        validate_certs: false
+        status_code: [200, 302, 403]
+        follow_redirects: safe
+      register: devspaces_health
+
+    - name: Health check summary
+      ansible.builtin.debug:
+        msg: |
+          ══════════════════════════════════════════
+           Health Check Results
+          ══════════════════════════════════════════
+           OpenShift API:  {{ 'PASS' if ocp_health.status == 200 else 'FAIL' }}
+           Gitea:          {{ 'PASS' if gitea_health.status == 200 else 'FAIL' }}
+           CTFd:           {{ 'PASS' if ctfd_health.status == 200 else 'FAIL' }}
+           Dev Spaces:     {{ 'PASS' if devspaces_health.status in [200, 302, 403] else 'FAIL' }}
+          ══════════════════════════════════════════

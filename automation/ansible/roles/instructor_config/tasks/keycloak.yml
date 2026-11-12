@@ -1,0 +1,82 @@
+---
+# Create per-instructor users in Keycloak SSO realm.
+
+- name: Get Keycloak admin token
+  ansible.builtin.uri:
+    url: "{{ keycloak_admin_console }}/realms/master/protocol/openid-connect/token"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      client_id: admin-cli
+      username: "{{ keycloak_admin_user }}"
+      password: "{{ keycloak_admin_password }}"
+      grant_type: password
+    validate_certs: false
+    status_code: 200
+  register: _kc_token
+  no_log: true
+
+- name: Set Keycloak admin token fact
+  ansible.builtin.set_fact:
+    _kc_admin_token: "{{ _kc_token.json.access_token }}"
+  no_log: true
+
+# ── Per-instructor user ──────────────────────────────────────────
+- name: "{{ instructor.name }} — Create SSO user"
+  ansible.builtin.uri:
+    url: "{{ keycloak_admin_console }}/admin/realms/sso/users"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ _kc_admin_token }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      username: "{{ instructor.name }}"
+      email: "{{ instructor.name }}@island.local"
+      firstName: "{{ instructor.name }}"
+      lastName: Instructor
+      enabled: true
+      emailVerified: true
+      requiredActions: []
+    validate_certs: false
+    status_code: [201, 409]
+
+- name: "{{ instructor.name }} — Look up SSO user ID"
+  ansible.builtin.uri:
+    url: "{{ keycloak_admin_console }}/admin/realms/sso/users?username={{ instructor.name }}&exact=true"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ _kc_admin_token }}"
+    validate_certs: false
+    status_code: 200
+  register: _kc_user
+
+- name: "{{ instructor.name }} — Set SSO user password"
+  ansible.builtin.uri:
+    url: "{{ keycloak_admin_console }}/admin/realms/sso/users/{{ _kc_user.json[0].id }}/reset-password"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ _kc_admin_token }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      type: password
+      value: "{{ instructor.password }}"
+      temporary: false
+    validate_certs: false
+    status_code: 204
+  no_log: true
+
+- name: "{{ instructor.name }} — Publish Keycloak SSO info"
+  agnosticd.core.agnosticd_user_info:
+    msg: |
+      Keycloak SSO:
+        URL:      {{ keycloak_admin_console }}
+        Username: {{ instructor.name }}
+        Password: {{ instructor.password }}
+        Realm:    sso
+    data:
+      keycloak_url: "{{ keycloak_admin_console }}"
+      keycloak_username: "{{ instructor.name }}"
+      keycloak_password: "{{ instructor.password }}"
+      keycloak_realm: sso

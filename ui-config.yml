@@ -1,0 +1,24 @@
+---
+type: showroom
+
+default_width: 30
+persist_url_state: true
+
+view_switcher:
+  enabled: true
+  default_mode: split
+
+tabs:
+  - name: ">_ terminal"
+    path: /wetty
+    port: 443
+  - name: OCP
+    url: 'https://console-openshift-console.${DOMAIN}'
+  - name: CTFd
+    url: "https://island-instructor-${GUID}-ctfd.${DOMAIN}"
+  - name: Devspaces
+    url: "https://devspaces.${DOMAIN}"
+  - name: AAP
+    url: "https://aap-aap.${DOMAIN}"
+  - name: Gitea
+    url: "https://gitea.${DOMAIN}"

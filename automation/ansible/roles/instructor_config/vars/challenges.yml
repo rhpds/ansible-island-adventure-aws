@@ -1,0 +1,423 @@
+---
+# CTFd challenge definitions with placeholder flags.
+# Replace CHANGEME with real flag values for production use.
+
+ctfd_challenges:
+- name: Write your name in the sand
+  description: 'Write your name in the sand. This way, a search plane might see it and know you are there and come rescue
+    you.
+
+
+    ## Objective:
+
+
+    Your current name is `student<n>`. Please change it to your real name and also add your email address. This will be important
+    to have a chance to win prizes.
+
+
+    ## Specifications:
+
+
+    In the top right corner, click on "Settings"
+
+
+    Change the User Name to your full name: e.g. John Smith
+
+
+    Change the Email address: e.g. jsmith@mycompany.com
+
+
+    Once completed, enter `DONE` in the flag section and click submit to receive your first point!'
+  value: 5
+  category: Warm Up
+  state: visible
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+- name: Unlock the island
+  description: Wait for the game master to provide a KEY to unlock the rest of the island. Enter this key in the flag section
+    and click submit.
+  value: 5
+  category: Warm Up
+  state: visible
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+- name: Ansible Docs
+  description: What is the URL to find documentation about Ansible?
+  value: 10
+  category: Warm Up
+  state: visible
+  flags:
+  - content: CHANGEME
+    type: regex
+    data: case_insensitive
+  hints:
+  - content: Try searching for "Ansible documentation" in your favorite search engine.
+    cost: 2
+- name: Ansible Collections
+  description: There are thousands of Ansible collections that are community-driven. What is the URL to this rich repository
+    of ready-made collections?
+  value: 10
+  category: Warm Up
+  state: visible
+  flags:
+  - content: CHANGEME
+    type: regex
+    data: case_insensitive
+  hints:
+  - content: Ansible's community hub for sharing collections shares its name with something vast and full of stars.
+    cost: 2
+- name: Ansible Certified Collections
+  description: There are hundreds of certified and validated content collections provided with the Ansible Automation Platform
+    subscription, jointly supported through Red Hat and the partner/vendor. Enter the full URL where this content hub can
+    be accessed.
+  value: 15
+  category: Warm Up
+  state: visible
+  prerequisites:
+  - Ansible Collections
+  flags:
+  - content: CHANGEME
+    type: regex
+    data: case_insensitive
+  hints:
+  - content: If you don't have an Ansible Automation Platform subscription, you may not have encountered this certified content
+      repository. Feel free to ask someone who does (or someone that might know about it, like a Red Hatter).
+    cost: 2
+- name: The Navigator's Run
+  description: 'The waves lap at your boots as you approach a weathered wooden signpost jutting out of the salt-crusted sand.
+    The interface pulses with a dim blue light. It wants to know the version of the automation engine you''ve recovered.
+
+
+    __Your Task__: Access your Dev Spaces workspace terminal and query the Ansible core version running in your environment.
+    Enter that precise version number.
+
+
+    > A captain who doesn''t know the make of his own compass is doomed to sail in circles.'
+  value: 25
+  category: Let's get started
+  state: visible
+  prerequisites:
+  - Unlock the island
+  flags:
+  - content: CHANGEME
+    type: regex
+  hints:
+  - content: Open a terminal in your Dev Spaces workspace. Then run the command to show which version of Ansible is available.
+    cost: 2
+  - content: Run `ansible --version` or `rpm -q ansible-core` to find the installed version.
+    cost: 10
+- name: The High Tower Signal Strength
+  description: "As you move inland, the island's terrain begins to rise sharply. You spot a Signal Tower \u2014 the **control\
+    \ center** for the League's automated defenses. Connect to the Ansible Automation Platform using the URL provided by your\
+    \ instructor. Once you've logged in, find the Platform Version.\n\n> A fortress is only as strong as the blueprint it\
+    \ was built upon."
+  value: 25
+  category: Let's get started
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - The Navigator's Run
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+  hints:
+  - content: After logging in to the Ansible Automation Platform, look for version information on the main dashboard or in
+      the "About" section accessible from the help menu (?).
+    cost: 5
+- name: Ansible Automation Platform Controller Version
+  description: 'You''ve found the heart of the tower: the **Controller**. Navigate within the Citadel''s halls and locate
+    the Controller version number.
+
+
+    > A first mate who cannot name his own ship is unfit to command it.'
+  value: 25
+  category: Let's get started
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - The High Tower Signal Strength
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+  hints:
+  - content: The Platform Version and the Controller Version are not the same thing. The Controller version can be found under
+      the About dialog or in the footer of the Automation Controller UI.
+    cost: 5
+- name: Great Git-Away
+  description: "Go to your Gitea web portal and find the project created for you there. Enter the name of the repository as\
+    \ the flag for this challenge.\n\n> A manifest is a captain's ledger\u2014know what's in your hold before you set sail."
+  value: 15
+  category: At the Beach
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - The Navigator's Run
+  flags:
+  - content: CHANGEME
+    type: regex
+    data: case_insensitive
+  hints:
+  - content: Find the Gitea URL on your handout, open it in a browser, and log in with your access credentials.
+    cost: 2
+  - content: After logging into Gitea, you should see one repository listed on the right side of your dashboard.
+    cost: 5
+- name: Hello World Beach
+  description: 'Go to your Dev Spaces workspace, open a terminal, and clone your `ansible-survival-kit` repository using git.
+    Run the `hello-world.yml` playbook and enter the keyword from the output.
+
+
+    > To read the scrolls, you must first bring the ship to port.'
+  value: 50
+  category: At the Beach
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - Great Git-Away
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+  hints:
+  - content: Find the repository URL from the Great Git-Away challenge and use it to clone the repository.
+    cost: 2
+  - content: Open a terminal in Dev Spaces. Copy the repository URL from Gitea. Run `git clone <url>` to clone it, then `cd
+      ansible-survival-kit` and `ansible-playbook hello-world.yml` to run the playbook.
+    cost: 10
+- name: Message in a Bottle at the Beach
+  description: "Half-buried in the wet sand near the waterline, you spot the glint of green glass. It's a bottle, sealed with\
+    \ wax and barnacles. Inside, a rolled scrap of parchment\u2014encrypted with **Ansible Vault**.\n\nYour repository contains\
+    \ a file called `message-in-a-bottle.txt`. The passphrase to break the seal is `redhat`.\n\nDecrypt the message and enter\
+    \ the full text as your flag.\n\n> The sea keeps many secrets, but the wise know how to unseal them."
+  value: 50
+  category: At the Beach
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - Hello World Beach
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+  hints:
+  - content: Try `ansible-vault decrypt` or `ansible-vault view` with the `--ask-vault-pass` option.
+    cost: 5
+- name: Hello World Treasure Hunt
+  description: 'It''s time to bring your work into the tower. Create a **Project** in the AAP Controller using your Gitea
+    `ansible-survival-kit` repository. Use the `treasurehunt` branch. Then create a **Job Template** with the `hello-world.yml`
+    playbook, and launch it. Listen for the keyword it reveals.
+
+
+    > The shore teaches you to survive. The Citadel teaches you to command.'
+  value: 75
+  category: Treasure Hunt
+  state: visible
+  prerequisites:
+  - Hello World Beach
+  - Message in a Bottle at the Beach
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+  hints:
+  - content: In the AAP Controller, go to Automation Execution -> Projects and create a new project pointing to your Gitea
+      repository URL. Set the Source Control Branch to `treasurehunt`. Then go to Automation Execution -> Templates and create
+      a Job Template using this project and the `hello-world.yml` playbook.
+    cost: 10
+- name: Secret Message Treasure Hunt
+  description: 'Create a **Vault Credential** within the Automation Platform using the vault password `AAP`. Then create a
+    new **Job Template** that uses this credential alongside the `secret-word.yml` playbook from your project. Launch the
+    job and let the Controller unseal the chest for you.
+
+
+    Enter the secret message revealed in the output.
+
+
+    > A vault without a key is just a box. A vault with the right credential is a gift.'
+  value: 75
+  category: Treasure Hunt
+  state: visible
+  prerequisites:
+  - Hello World Treasure Hunt
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+  hints:
+  - content: Go to Automation Execution -> Infrastructure -> Credentials and create a new credential of type "Vault". Enter
+      `AAP` as the vault password. Then create a new Job Template that uses both this vault credential and the `secret-word.yml`
+      playbook.
+    cost: 10
+- name: You found a treasure chest
+  description: "Create a **Job Template** to deploy a web server using the `apache/apache_role_install.yml` playbook. Attach\
+    \ the **Machine Credential** and the **Vault Credential** you forged earlier, and run it against the inventory. When the\
+    \ server rises, visit the web page it serves\u2014the treasure keyword awaits.\n\n> The greatest treasure on any island\
+    \ is not gold. It is the power to build something from nothing."
+  value: 100
+  category: Treasure Hunt
+  state: visible
+  prerequisites:
+  - Secret Message Treasure Hunt
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+  hints:
+  - content: Use the **Machine Credential** together with the **Inventory**. Add the **Vault Credential** you created earlier.
+      Enable **Privilege escalation**. These are all required for the job to succeed.
+    cost: 10
+  - content: After the job succeeds, use `curl` via the Dev Spaces terminal using the node's hostname to access the web page.
+    cost: 20
+- name: Marooned on World 62
+  description: "A corroded bronze plaque tells a strange origin story about the word 'Ansible' and the engineer who created\
+    \ the automation tool. **Who was this engineer\u2014the creator of Ansible?** Enter the creator's first and last name.\n\
+    \n> Every great tool has a maker. Every maker has a name worth remembering."
+  value: 10
+  category: Trivia
+  state: visible
+  prerequisites:
+  - Unlock the island
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+  hints:
+  - content: Try searching for "who created Ansible automation".
+    cost: 2
+- name: No Strings on the Shoreline
+  description: "The engineer who created Ansible saw these heavyweight, Ruby-based predecessors and envisioned something leaner\u2014\
+    agentless, SSH-native, no master server required. **Which of these predecessors inspired Ansible's streamlined design?**\
+    \ There are two possible answers; enter one or both.\n\n> The best strings are the ones you never need to pull."
+  value: 13
+  category: Trivia
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - Marooned on World 62
+  flags:
+  - content: CHANGEME
+    type: regex
+    data: case_insensitive
+- name: 'Quest: The Blacksmith''s Hammer'
+  description: Find the chest that holds the secret of **ansible-creator** and return with its flag. This is an [ansible-quest](https://l3acon.github.io/ansible-quest/)
+    challenge!
+  value: 5
+  category: Side Quest
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - No Strings on the Shoreline
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+- name: 'Quest: The Whetstone'
+  description: Find the chest that holds the secret of **ansible-lint** and return with its flag. This is an [ansible-quest](https://l3acon.github.io/ansible-quest/)
+    challenge!
+  value: 5
+  category: Side Quest
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - No Strings on the Shoreline
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+- name: 'Quest: The Alchemist''s Mortar'
+  description: Find the chest that holds the secret of **ade** and return with its flag. This is an [ansible-quest](https://l3acon.github.io/ansible-quest/)
+    challenge!
+  value: 5
+  category: Side Quest
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - No Strings on the Shoreline
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+- name: 'Quest: The War Mace'
+  description: Find the chest that holds the secret of **Molecule** and return with its flag. This is an [ansible-quest](https://l3acon.github.io/ansible-quest/)
+    challenge!
+  value: 5
+  category: Side Quest
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - No Strings on the Shoreline
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+- name: 'Quest: The Crossbow'
+  description: Find the chest that holds the secret of **pytest-ansible** and return with its flag. This is an [ansible-quest](https://l3acon.github.io/ansible-quest/)
+    challenge!
+  value: 5
+  category: Side Quest
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - No Strings on the Shoreline
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+- name: 'Quest: The Battle Axe'
+  description: Find the chest that holds the secret of **tox-ansible** and return with its flag. This is an [ansible-quest](https://l3acon.github.io/ansible-quest/)
+    challenge!
+  value: 5
+  category: Side Quest
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - No Strings on the Shoreline
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+- name: 'Quest: The Siege Tower'
+  description: Find the chest that holds the secret of **ansible-builder** and return with its flag. This is an [ansible-quest](https://l3acon.github.io/ansible-quest/)
+    challenge!
+  value: 5
+  category: Side Quest
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - No Strings on the Shoreline
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+- name: 'Quest: The Royal Seal'
+  description: Find the chest that holds the secret of **ansible-sign** and return with its flag. This is an [ansible-quest](https://l3acon.github.io/ansible-quest/)
+    challenge!
+  value: 5
+  category: Side Quest
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - No Strings on the Shoreline
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+- name: 'Quest: The Enchanted Compass'
+  description: Find the chest that holds the secret of **ansible-navigator** and return with its flag. This is an [ansible-quest](https://l3acon.github.io/ansible-quest/)
+    challenge!
+  value: 5
+  category: Side Quest
+  state: visible
+  prerequisites:
+  - Unlock the island
+  - No Strings on the Shoreline
+  flags:
+  - content: CHANGEME
+    data: case_insensitive
+ctfd_challenges_advanced:
+- name: 'First Landing: Deploy a File'
+  description: "Write an Ansible playbook that deploys a file to your managed node at `/opt/island/beacon.txt` containing\
+    \ exactly `the island welcomes you`.\n\nOnce your playbook has run successfully, validate your solution:\n``` curl -X\
+    \ POST https://<verifier-url>/validate \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"token\": \"YOUR_TOKEN\"\
+    , \"challenge\": \"deploy-file\"}'\n```"
+  value: 50
+  category: Automation Basics
+  state: visible
+  prerequisites:
+  - You found a treasure chest
+  flags:
+  - content: CHANGEME
+    type: regex
+    data: case_insensitive
+  hints:
+  - content: Use the `ansible.builtin.copy` module with the `content` parameter.
+    cost: 5
+  - content: 'Your playbook should use `become: true` since `/opt` requires root to write into.'
+    cost: 15

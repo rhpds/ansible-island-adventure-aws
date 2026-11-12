@@ -1,0 +1,20 @@
+*Your instructor username:* `{keycloak_username}`
+
+*Your provisioned lab password:* `{password}`
+
+Your CTFd instance is dedicated to you. Sign in as `{ctfd_admin_username}` to manage the event or as `{ctfd_student_username}` to play the challenges.
+Gitea, AAP, Dev Spaces, and the OpenShift console are shared services with an individual account for each student.
+
+[cols="2,1",options="header"]
+|===
+| Service | Username
+
+| Your CTFd — event administration | `{ctfd_admin_username}`
+| Your CTFd — playing challenges | `{ctfd_student_username}`
+| Shared Gitea | `{gitea_username}`
+| Shared AAP | `{aap_username}`
+| Shared Dev Spaces / OpenShift console | `{keycloak_username}`
+| Terminal / managed-node SSH | `{user}`
+|===
+
+Use the provisioned lab password shown above for these accounts.

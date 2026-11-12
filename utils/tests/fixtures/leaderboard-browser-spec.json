@@ -1,0 +1,15 @@
+{
+  "autoDetach": {
+    "when": "status.resources | json_query(\"[?state.spec.vars.current_state == 'provision-failed']\") | length != 0"
+  },
+  "lifespan": {
+    "end": "2030-01-04T00:00:00Z"
+  },
+  "provider": {
+    "name": "rh1-2027.lb1663-rh1-ans-island-leaderboard-cnv.dev",
+    "parameterValues": {
+      "purpose": "Developing a community demo",
+      "stop_timestamp": "2030-01-01T04:00:00Z"
+    }
+  }
+}

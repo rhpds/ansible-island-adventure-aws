@@ -1,0 +1,148 @@
+---
+# Inventory: python utils/dev-environment.py export-students --run <run-id>
+# Run from automation/ansible, passing the private inventory and vault password.
+- name: Validate all deployed student mappings and event flags
+  hosts: aia_students
+  connection: local
+  gather_facts: false
+  any_errors_fatal: true
+  tags: [always, preflight]
+  vars_files:
+    - ../../ansible-testing/vars/challenges.yml
+    - "{{ aia_event_flags_file | default(playbook_dir ~ '/../../ansible-testing/vars/flags.yml') }}"
+  tasks:
+    - name: Require an exported student identity
+      ansible.builtin.assert:
+        that:
+          - aia_student.guid == guid
+          - instructor.name == gitea_username
+          - aia_student.ctfd_username == student_name
+          - aia_student.ctfd_url is match('^https://')
+          - aia_student.gitea_url == gitea_url
+          - aia_kubeconfig is defined
+          - aia_lab_password | length > 0
+          - aap_password | length > 0
+          - aia_managed_node.host | length > 0
+          - aia_managed_node.password | length > 0
+        fail_msg: Export the deployed students with utils/dev-environment.py export-students first.
+
+    - name: Validate the requested verifier integration
+      ansible.builtin.assert:
+        that:
+          - not (aia_enable_advanced | default(false) | bool) or (aia_student.verifier_url | default('') is match('^https://'))
+        fail_msg: Advanced challenges require a deployed verifier URL.
+
+    - name: Resolve real challenge flags and per-student repository links
+      ansible.builtin.set_fact:
+        aia_event_challenges: >-
+          {{ aia_event_challenges | default([]) + [item | combine({
+            'description': item.description ~ (
+              '\n\nYour repository: [' ~ gitea_username ~ '/ansible-survival-kit](' ~
+              gitea_url ~ '/' ~ gitea_username ~ '/ansible-survival-kit).'
+              if item.category in ['At the Beach', 'Treasure Hunt'] else '')
+          })] }}
+      loop: "{{ ctfd_challenges + (ctfd_challenges_advanced if (aia_enable_advanced | default(false) | bool) else []) }}"
+      no_log: true
+
+    - name: Reject missing or placeholder flags before changing any service
+      ansible.builtin.assert:
+        that:
+          - item.content is string
+          - item.content | trim | length > 0
+          - item.content != 'CHANGEME'
+          - "('{' ~ '{') not in item.content"
+        fail_msg: Each challenge requires a resolved real flag from the event vault.
+      loop: "{{ aia_event_challenges | map(attribute='flags') | flatten }}"
+      no_log: true
+
+# The leaderboard CI owns this cluster-wide policy (core_workloads#197,
+# agnosticv#28869). Validate it without hiding provisioning regressions.
+- name: Validate the shared leaderboard Dev Spaces policy
+  ansible.builtin.import_playbook: validate_devspaces.yml
+
+- name: Connect each student CTFd board to its Gitea repositories
+  hosts: aia_students
+  connection: local
+  gather_facts: true
+  serial: 1
+  environment:
+    KUBECONFIG: "{{ aia_kubeconfig }}"
+  tasks:
+    - name: Configure student services
+      block:
+        - name: Configure each instructor's AAP managed-node access
+          tags: [student_access, aap]
+          ansible.builtin.include_role:
+            name: configure_student_aap
+            apply:
+              tags: [student_access, aap]
+
+        - name: Configure and verify student Gitea repositories
+          tags: [student_access]
+          ansible.builtin.include_role:
+            name: configure_student
+            apply:
+              tags: [student_access]
+
+        - name: Prepare OpenShift access for CTFd content loading
+          ansible.builtin.include_role:
+            name: instructor_config
+            tasks_from: oc_login
+
+        - name: Load the student's real challenges into CTFd
+          ansible.builtin.include_role:
+            name: instructor_config
+            tasks_from: ctfd_config
+            apply:
+              no_log: true
+          vars:
+            ctfd_challenges: "{{ aia_event_challenges }}"
+            ctfd_challenges_advanced: []
+
+        - name: Update real flag values without replacing challenges or scores
+          tags: [flags]
+          aia_ctfd_flags:
+            url: "{{ aia_student.ctfd_url }}"
+            username: "{{ ctfd_admin_username }}"
+            password: "{{ ctfd_admin_password }}"
+            challenges: "{{ aia_event_challenges }}"
+            validate_certs: "{{ aia_validate_certs | default(true) }}"
+
+        - name: Report student configuration
+          tags: [flags]
+          ansible.builtin.debug:
+            msg:
+              student: "{{ instructor.name }}"
+              ctfd_url: "{{ aia_student.ctfd_url }}"
+              ctfd_username: "{{ student_name }}"
+              gitea_username: "{{ gitea_username }}"
+              access_guide: "{{ gitea_url }}/{{ gitea_username }}/aia-instructor/src/branch/main/ISLAND_ACCESS.md"
+              event_challenges: "{{ aia_event_challenges | length }}"
+
+      always:
+        - name: Validate resource connectivity and retain evidence
+          tags: [readiness]
+          vars:
+            aia_readiness_enforce_gate: false
+          ansible.builtin.include_role:
+            name: validate_connectivity
+            apply:
+              tags: [readiness]
+
+# Enforcing inside serial: 1 would terminate the play at its first failed batch.
+- name: Require readiness after collecting every student's evidence
+  hosts: aia_students
+  connection: local
+  gather_facts: false
+  tags: [readiness]
+  tasks:
+    - name: Require this student's measured runtime paths to pass
+      when:
+        - aia_readiness_enabled | default(true) | bool
+        - not ansible_check_mode
+      ansible.builtin.assert:
+        that:
+          - aia_connectivity_result.report.status == 'passed'
+        fail_msg: >-
+          Connectivity readiness failed for {{ inventory_hostname }}. See the
+          retained JSON report and ConfigMap {{ instructor.lab_ns | default(instructor.name ~ '-lab') }}/aia-readiness.

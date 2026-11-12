@@ -1,0 +1,49 @@
+---
+- name: "{{ instructor.name }} — Create instructor namespaces"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ item }}"
+        labels:
+          island-adventure/instructor: "{{ instructor.name }}"
+  loop:
+    - "{{ instructor.ctfd_ns }}"
+    - "{{ instructor.lab_ns }}"
+
+- name: "{{ instructor.name }} — Grant anyuid SCC on lab namespace for managed node"
+  ansible.builtin.command:
+    argv:
+      - oc
+      - adm
+      - policy
+      - add-scc-to-user
+      - anyuid
+      - -z
+      - default
+      - -n
+      - "{{ instructor.lab_ns }}"
+  changed_when: true
+
+- name: "{{ instructor.name }} — Grant admin RoleBinding on namespaces"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: "{{ instructor.name }}-admin"
+        namespace: "{{ item }}"
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: admin
+      subjects:
+        - apiGroup: rbac.authorization.k8s.io
+          kind: User
+          name: "{{ instructor.name }}"
+  loop:
+    - "{{ instructor.ctfd_ns }}"
+    - "{{ instructor.lab_ns }}"

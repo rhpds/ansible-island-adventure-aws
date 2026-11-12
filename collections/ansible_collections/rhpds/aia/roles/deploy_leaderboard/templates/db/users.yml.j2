@@ -1,0 +1,35 @@
+count: 2
+results:
+  - id: 1
+    oauth_id: null
+    name: "{{ aia_ctfd_admin_username }}"
+    password: "{{ _ctfd_admin_hash }}"
+    email: "{{ aia_ctfd_admin_email }}"
+    type: admin
+    secret: null
+    website: null
+    affiliation: null
+    country: null
+    bracket: null
+    hidden: 1
+    banned: 0
+    verified: 0
+    team_id: null
+    language: null
+  - id: 2
+    oauth_id: null
+    name: "{{ _inst.name }}"
+    password: "{{ _ctfd_instructor_hash }}"
+    email: "{{ _inst.name }}@island.local"
+    type: user
+    secret: null
+    website: null
+    affiliation: null
+    country: null
+    bracket: null
+    hidden: 0
+    banned: 0
+    verified: 0
+    team_id: null
+    language: null
+meta: {}

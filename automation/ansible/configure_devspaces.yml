@@ -1,0 +1,19 @@
+---
+# The exported inventory describes students on one shared leaderboard cluster.
+# Keep this cluster-wide configuration outside the per-student serial play.
+# Standalone repair for older leaderboard deployments only. New CIs own this
+# configuration; post_deploy imports the read-only validate_devspaces.yml instead.
+# Tracking: https://github.com/rhpds/core_workloads/pull/197
+#           https://github.com/rhpds/agnosticv/pull/28869
+- name: Configure shared Dev Spaces on the existing leaderboard cluster
+  hosts: aia_students
+  connection: local
+  gather_facts: false
+  tags: [devspaces, devspaces_ci_workaround]
+  tasks:
+    - name: Apply the shared workspace policy once per leaderboard inventory
+      ansible.builtin.include_role:
+        name: configure_devspaces
+        apply:
+          tags: [devspaces, devspaces_ci_workaround]
+      run_once: true

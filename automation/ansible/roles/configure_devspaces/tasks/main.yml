@@ -1,0 +1,49 @@
+---
+- name: Validate the shared Dev Spaces workspace policy
+  ansible.builtin.assert:
+    that:
+      - aia_kubeconfig is defined
+      - aia_devspaces_running_workspaces_per_user | int > 0
+      - aia_devspaces_pvc_strategy == 'per-workspace'
+    fail_msg: Concurrent persistent workspaces require a leaderboard kubeconfig and per-workspace storage.
+
+- name: Read the leaderboard's existing Dev Spaces configuration
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ aia_kubeconfig }}"
+    api_version: org.eclipse.che/v2
+    kind: CheCluster
+    namespace: "{{ aia_devspaces_namespace }}"
+    name: "{{ aia_devspaces_name }}"
+  register: _aia_devspaces
+
+- name: Require Dev Spaces to have been provisioned by the leaderboard CI
+  ansible.builtin.assert:
+    that:
+      - _aia_devspaces.resources | length == 1
+    fail_msg: The leaderboard CI must deploy Dev Spaces before running post-deploy configuration.
+
+- name: Allow concurrent workspaces with independent persistent storage
+  kubernetes.core.k8s:
+    kubeconfig: "{{ aia_kubeconfig }}"
+    state: patched
+    merge_type: merge
+    definition: >-
+      {{ {
+        'apiVersion': 'org.eclipse.che/v2',
+        'kind': 'CheCluster',
+        'metadata': {
+          'name': aia_devspaces_name,
+          'namespace': aia_devspaces_namespace
+        },
+        'spec': {'devEnvironments': {
+          'maxNumberOfRunningWorkspacesPerUser': aia_devspaces_running_workspaces_per_user | int,
+          'storage': {'pvcStrategy': aia_devspaces_pvc_strategy}
+        }}
+      } }}
+
+- name: Report the shared Dev Spaces workspace policy
+  ansible.builtin.debug:
+    msg:
+      running_workspaces_per_user: "{{ aia_devspaces_running_workspaces_per_user | int }}"
+      pvc_strategy: "{{ aia_devspaces_pvc_strategy }}"
+      existing_workspaces: Existing workspaces and PVCs are not migrated or deleted. Back up local changes before recreating old per-user workspaces.

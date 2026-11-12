@@ -1,0 +1,62 @@
+---
+- name: Verify the student's Gitea login
+  ansible.builtin.uri:
+    url: "{{ gitea_url }}/api/v1/user"
+    user: "{{ gitea_username }}"
+    password: "{{ gitea_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aia_validate_certs }}"
+    status_code: 200
+  register: _aia_gitea_user
+  no_log: true
+
+- name: Require the authenticated Gitea owner to match this student
+  ansible.builtin.assert:
+    that:
+      - _aia_gitea_user.json.login == gitea_username
+    fail_msg: Gitea credentials do not belong to the exported student.
+
+- name: Ensure the student's repositories and required branches exist
+  ansible.builtin.include_tasks: repository.yml
+  loop: "{{ aia_student_repositories }}"
+  loop_control:
+    loop_var: aia_repository
+    label: "{{ gitea_username }}/{{ aia_repository.name }}"
+
+- name: Use the student's lab password for instructor answers
+  ansible.builtin.include_tasks: vault.yml
+
+- name: Render the student's access guide
+  ansible.builtin.set_fact:
+    _aia_access_guide: "{{ lookup('template', 'ISLAND_ACCESS.md.j2') }}"
+
+- name: Read the existing generated access guide
+  ansible.builtin.uri:
+    url: "{{ gitea_url }}/api/v1/repos/{{ gitea_username }}/aia-instructor/contents/ISLAND_ACCESS.md?ref=main"
+    user: "{{ gitea_username }}"
+    password: "{{ gitea_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aia_validate_certs }}"
+    status_code: [200, 404]
+  register: _aia_existing_guide
+  no_log: true
+
+- name: Create or update only the generated access guide
+  ansible.builtin.uri:
+    url: "{{ gitea_url }}/api/v1/repos/{{ gitea_username }}/aia-instructor/contents/ISLAND_ACCESS.md"
+    method: "{{ 'PUT' if _aia_existing_guide.status == 200 else 'POST' }}"
+    user: "{{ gitea_username }}"
+    password: "{{ gitea_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aia_validate_certs }}"
+    body_format: json
+    body: >-
+      {{ {'branch': 'main', 'message': 'Configure Ansible Island Adventure access links',
+          'content': _aia_access_guide | b64encode} |
+         combine({'sha': _aia_existing_guide.json.sha} if _aia_existing_guide.status == 200 else {}) }}
+    status_code: [200, 201]
+  when: >-
+    _aia_existing_guide.status == 404 or
+    (_aia_existing_guide.json.content | default('') | b64decode) != _aia_access_guide
+  changed_when: true
+  no_log: true

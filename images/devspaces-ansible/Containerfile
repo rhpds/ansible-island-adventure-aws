@@ -1,0 +1,22 @@
+# Upstream's UBI9-based Ansible toolchain, including the Dev Spaces entrypoint.
+# Update the digest deliberately and validate in a real DevWorkspace.
+FROM ghcr.io/ansible/ansible-devspaces@sha256:12db1db91682f48b9a853d255a7294e3b903d85a4c34ddc6e47e42a9bcc21ecf
+
+LABEL org.opencontainers.image.source="https://github.com/rhpds/ansible-island-adventure"
+LABEL org.opencontainers.image.description="Ansible Island Adventure Dev Spaces workspace"
+
+USER 0
+# Python dependencies are already included in the digest-pinned upstream image.
+ENV ANSIBLE_COLLECTIONS_PATH=/opt/ansible/collections:/home/user/.ansible/collections:/usr/share/ansible/collections
+RUN ansible-galaxy collection install -p /opt/ansible/collections \
+      kubernetes.core:6.2.0 community.general:11.4.0 ansible.posix:2.1.0 && \
+    chmod -R a+rX /opt/ansible
+
+USER 1000
+WORKDIR /projects
+RUN ansible --version && ansible-vault --version && ansible-lint --version && \
+    ansible-navigator --version && ansible-builder --version && molecule --version && \
+    python3 -c 'import kubernetes, requests, yaml'
+# Override any interactive shell defaults: the workspace must stay alive.
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["tail", "-f", "/dev/null"]

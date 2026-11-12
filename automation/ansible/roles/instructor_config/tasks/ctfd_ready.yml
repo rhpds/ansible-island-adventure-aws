@@ -1,0 +1,30 @@
+---
+- name: "{{ instructor.name }} — Set CTFd base URL"
+  ansible.builtin.set_fact:
+    _ctfd_base_url: "https://island-{{ instructor.ctfd_ns }}.{{ cluster_apps_domain }}"
+
+- name: "{{ instructor.name }} — Wait for CTFd deployment to be ready"
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: ctfd
+    namespace: "{{ instructor.ctfd_ns }}"
+  register: _ctfd_deploy
+  until: >-
+    (_ctfd_deploy.resources | length > 0) and
+    (_ctfd_deploy.resources[0].status.readyReplicas | default(0)) >= 1
+  retries: 30
+  delay: 10
+  environment:
+    PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
+
+- name: "{{ instructor.name }} — Wait for CTFd to be healthy"
+  ansible.builtin.uri:
+    url: "{{ _ctfd_base_url }}/healthcheck"
+    method: GET
+    validate_certs: false
+    status_code: [200]
+  register: _ctfd_health
+  until: _ctfd_health.status | default(0) == 200
+  retries: 30
+  delay: 10

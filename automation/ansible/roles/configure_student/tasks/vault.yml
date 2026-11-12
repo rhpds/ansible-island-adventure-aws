@@ -1,0 +1,36 @@
+---
+- name: Read the student's encrypted instructor answers
+  ansible.builtin.uri:
+    url: "{{ gitea_url }}/api/v1/repos/{{ gitea_username }}/aia-instructor/contents/roles/ctfd/vars/flags.yml?ref=main"
+    user: "{{ gitea_username }}"
+    password: "{{ gitea_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aia_validate_certs }}"
+  register: _aia_instructor_vault
+  no_log: true
+
+- name: Re-key instructor answers in memory with the provisioned lab password
+  ansible.builtin.set_fact:
+    _aia_rekeyed_vault: >-
+      {{ (_aia_instructor_vault.json.content | b64decode) |
+         aia_rekey_vault(aia_instructor_vault_source_password, aia_lab_password) }}
+  no_log: true
+
+- name: Save only the re-keyed ciphertext without replacing student edits
+  ansible.builtin.uri:
+    url: "{{ gitea_url }}/api/v1/repos/{{ gitea_username }}/aia-instructor/contents/roles/ctfd/vars/flags.yml"
+    method: PUT
+    user: "{{ gitea_username }}"
+    password: "{{ gitea_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aia_validate_certs }}"
+    body_format: json
+    body:
+      branch: main
+      message: Use the provisioned lab password for instructor answers
+      sha: "{{ _aia_instructor_vault.json.sha }}"
+      content: "{{ _aia_rekeyed_vault | b64encode }}"
+    status_code: 200
+  when: _aia_rekeyed_vault != (_aia_instructor_vault.json.content | b64decode)
+  changed_when: true
+  no_log: true

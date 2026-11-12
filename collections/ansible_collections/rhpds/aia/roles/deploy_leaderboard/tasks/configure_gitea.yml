@@ -1,0 +1,80 @@
+---
+- name: Set Gitea API URL
+  ansible.builtin.set_fact:
+    _gitea_api: "https://gitea-{{ aia_gitea_namespace }}.{{ aia_cluster_apps_domain }}/api/v1"
+
+- name: Create starter user
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/admin/users"
+    method: POST
+    body_format: json
+    body: { username: starter, password: "{{ aia_gitea_admin_password }}", email: "starter@island.local", must_change_password: false, login_name: starter, source_id: 0 }
+    user: "{{ aia_gitea_admin_user }}"
+    password: "{{ aia_gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [201, 422]
+
+- name: Migrate source repos into starter account
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/repos/migrate"
+    method: POST
+    body_format: json
+    body: { clone_addr: "{{ item.url }}", repo_name: "{{ item.name }}", repo_owner: starter, mirror: false, private: false }
+    user: "{{ aia_gitea_admin_user }}"
+    password: "{{ aia_gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [201, 409]
+  loop: "{{ aia_instructor_repos }}"
+
+- name: Create instructor Gitea users
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/admin/users"
+    method: POST
+    body_format: json
+    body: { username: "{{ item.name }}", password: "{{ item.password }}", email: "{{ item.name }}@island.local", must_change_password: false, login_name: "{{ item.name }}", source_id: 0 }
+    user: "{{ aia_gitea_admin_user }}"
+    password: "{{ aia_gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [201, 422]
+  loop: "{{ aia_instructors }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Update instructor Gitea passwords
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/admin/users/{{ item.name }}"
+    method: PATCH
+    body_format: json
+    body: { password: "{{ item.password }}", login_name: "{{ item.name }}", source_id: 0 }
+    user: "{{ aia_gitea_admin_user }}"
+    password: "{{ aia_gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  loop: "{{ aia_instructors }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Fork repos into each instructor's account
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/repos/starter/{{ aia_instructor_repos[0].name }}/forks"
+    method: POST
+    body_format: json
+    body: {}
+    user: "{{ aia_gitea_admin_user }}"
+    password: "{{ aia_gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    headers:
+      Sudo: "{{ item.name }}"
+    status_code: [202, 409]
+  loop: "{{ aia_instructors }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Report Gitea configured
+  ansible.builtin.debug:
+    msg: "Gitea: {{ aia_instructors | length }} instructor users with {{ aia_instructor_repos | length }} repo(s) each"

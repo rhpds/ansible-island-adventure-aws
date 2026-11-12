@@ -1,0 +1,39 @@
+# Ansible Island Adventure — AWS automation
+
+AWS-specific source copy of [Ansible Island Adventure](https://github.com/rhpds/ansible-island-adventure),
+based on upstream commit `565df07cdfcfeb6211f713fb7348d16adacfb223`.
+Development ticket: [RHDPCD-1137](https://redhat.atlassian.net/browse/RHDPCD-1137).
+
+The existing CNV repository remains unchanged. This repository provides the
+AWS version of the custom Ansible collection under `automation/ansible`.
+The collection keeps its original `ansible_island_adventure.automation` namespace;
+AWS catalog items install this implementation instead of the CNV implementation.
+
+## Deployment
+
+New AgnosticV catalog items:
+
+- `rh1-2027/lb1663-rh1-ans-island-leaderboard-aws`
+- `rh1-2027/lb1663-rh1-ans-island-student-aws`
+
+The leaderboard uses a multinode AWS OpenShift cluster with three workers.
+ODF uses gp3-backed storage and supplies CephFS RWX for AAP Hub. Student
+managed nodes use EC2 SSH endpoints and an OpenShift HTTPS route for the
+Apache challenge. See [AWS.md](AWS.md) for architecture and validation limits.
+
+Showroom content remains in the original public repository. Inherited content
+and utility scripts are retained as reference; their CNV ordering defaults
+must not be used to order AWS environments. This copy is not registered as
+the original Publishing House project and does not publish workflow updates.
+
+## Tests
+
+Install Ansible, PyYAML, Jinja2 and the dependencies used by the collection tests,
+then run:
+
+```sh
+python -m unittest discover -s automation/ansible/tests -v
+```
+
+These are local tests, not evidence of a successful AWS deployment. Live
+integration testing of ODF/RWX, AAP, student access and cleanup remains required.

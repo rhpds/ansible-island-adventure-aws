@@ -1,0 +1,21 @@
+count: {{ _all_challenges | length }}
+results:
+{% for c in _all_challenges %}
+  - id: {{ loop.index }}
+    name: {{ c.name | to_json }}
+    description: {{ c.description | to_json }}
+    max_attempts: {{ c.max_attempts | default(0) }}
+    value: {{ c.value }}
+    category: {{ c.category | to_json }}
+    type: {{ c.type | default('standard') }}
+    state: {{ c.state | default('visible') }}
+{% if c.prerequisites | default([]) %}
+    requirements:
+      prerequisites: [{{ c.prerequisites | map('extract', _challenge_name_to_id) | join(', ') }}]
+{% else %}
+    requirements: null
+{% endif %}
+    connection_info: null
+    next_id: null
+{% endfor %}
+meta: {}

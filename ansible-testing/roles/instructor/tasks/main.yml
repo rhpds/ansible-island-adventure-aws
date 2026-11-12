@@ -1,0 +1,9 @@
+---
+- name: "{{ instructor.name }} — Create namespaces"
+  ansible.builtin.include_tasks: namespaces.yml
+
+- name: "{{ instructor.name }} — Deploy CTFd stack"
+  ansible.builtin.include_tasks: ctfd.yml
+
+- name: "{{ instructor.name }} — Configure AAP org and access"
+  ansible.builtin.include_tasks: aap.yml

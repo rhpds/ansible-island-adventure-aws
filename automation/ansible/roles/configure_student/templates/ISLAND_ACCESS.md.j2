@@ -1,0 +1,64 @@
+# Your Ansible Island Adventure
+
+Student environment: `{{ aia_student.guid }}`
+
+| Service | Link | Username |
+| --- | --- | --- |
+| CTFd | [Challenge board]({{ aia_student.ctfd_url }}) | `{{ student_name }}` |
+| Gitea | [Your repositories]({{ gitea_url }}/{{ gitea_username }}) | `{{ gitea_username }}` |
+| AAP | [Automation Platform]({{ aia_student.aap_url }}) | `{{ aia_student.aap_username }}` |
+| Dev Spaces | [Workspace]({{ aia_student.devspaces_url }}) | `{{ aia_student.aap_username }}` |
+
+Credentials are available in your RHDP service access details.
+
+## Challenge repositories
+
+- [Ansible Survival Kit — main branch]({{ gitea_url }}/{{ gitea_username }}/ansible-survival-kit/src/branch/main)
+- [Ansible Survival Kit — treasurehunt branch]({{ gitea_url }}/{{ gitea_username }}/ansible-survival-kit/src/branch/treasurehunt)
+- [Instructor toolkit]({{ gitea_url }}/{{ gitea_username }}/aia-instructor)
+
+Managed node: `{{ aia_student.managed_node }}`.
+
+## Instructor toolkit setup
+
+In the `aia-instructor` Dev Spaces terminal, run your personal `oc login` command
+from the OpenShift console and create `.vault-password` with your
+provisioned lab password (mode `0600`). These are the only instructor inputs.
+
+Play first with `ansible-survival-kit`; open the instructor toolkit afterward
+for the assigned administration exercise. `update-challenges.yml` discovers
+your personal CTFd board and updates content while retaining solves.
+`deploy.yml` resets your board's challenge progress; use it before a new session
+or for the explicit training reset, after saving your gameplay results. Never
+reset an active competition. Both retain the provisioned accounts and passwords;
+the board reset does not recreate the VM, AAP resources, or Dev Spaces workspaces.
+The shared `gitea` namespace is restricted; use the Gitea web interface above.
+
+## Managed node in AAP
+
+Open **Automation Execution → Infrastructure → Inventories → Island Adventure**.
+The `web` group contains your `rhel` host. Its variables include the discovered
+VM FQDN and the published SSH endpoint/port. Use the **Managed Node SSH** Machine
+credential in your Apache job template; passwords stay in AAP's credential store.
+
+- VM FQDN: `{{ aia_aap_access.fqdn }}`
+- SSH endpoint: `{{ aia_managed_node.host }}:{{ aia_managed_node.port }}`
+- SSH username: `{{ aia_managed_node.username }}`
+
+{% if aia_student.managed_node_web_url is defined %}
+After the Apache job succeeds, open [your managed node's web page]({{ aia_student.managed_node_web_url }})
+to find the treasure-chest keyword. This URL is specific to your VM and remains
+stable across VM stop/start. Before Apache is deployed, it can report unavailable.
+
+You can also fetch the page through SSH from Dev Spaces:
+{% else %}
+This deployment does not publish a web URL. Fetch the Apache page from Dev Spaces
+through the published SSH endpoint:
+{% endif %}
+
+```bash
+ssh -p {{ aia_managed_node.port }} {{ aia_managed_node.username }}@{{ aia_managed_node.host }} 'curl -fsS http://127.0.0.1/'
+```
+
+The instructor `flags.yml` uses your provisioned lab password. Challenge vaults
+in `ansible-survival-kit` retain their documented passphrases, including `AAP`.

@@ -1,0 +1,30 @@
+---
+# Deploy the Ansible Island Adventure leaderboard (cluster services only).
+# Usage:
+#   ansible-playbook ansible-testing/deploy_leaderboard.yml \
+#     -e aia_leaderboard_env=.leaderboard.env \
+#     -e aia_aap_manifest_path=/home/matt/manifests/manifest.zip
+#
+# Optional: limit instructors
+#   -e '{"aia_instructor_count": 4}'
+
+- name: Deploy Ansible Island Adventure Leaderboard
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  collections:
+    - rhpds.aia
+
+  vars_files:
+    - "{{ playbook_dir }}/vars/flags.yml"
+    - "{{ playbook_dir }}/vars/challenges.yml"
+
+  pre_tasks:
+    - name: Map challenge vars to aia_ prefix
+      ansible.builtin.set_fact:
+        aia_ctfd_challenges: "{{ ctfd_challenges }}"
+        aia_ctfd_challenges_advanced: "{{ ctfd_challenges_advanced }}"
+
+  roles:
+    - rhpds.aia.deploy_leaderboard

@@ -1,0 +1,120 @@
+---
+# Deploy shared services on a cluster with AAP pre-installed.
+# Assumes: AAP operator + AnsibleAutomationPlatform CR already exist in 'aap' namespace.
+# Deploys: Dev Spaces operator, AAP license manifest.
+
+# ── Discover existing AAP instance ───────────────────────────────
+- name: Wait for AAP admin password secret
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    namespace: aap
+  register: _aap_secrets
+  until: >-
+    _aap_secrets.resources
+      | selectattr('metadata.name', 'match', '.*-admin-password$')
+      | list | length > 0
+  retries: 90
+  delay: 15
+
+- name: Get AAP admin password
+  ansible.builtin.set_fact:
+    aia_aap_admin_password: >-
+      {{ (_aap_secrets.resources
+          | selectattr('metadata.name', 'match', '.*-admin-password$')
+          | first).data.password | b64decode }}
+
+- name: Discover AAP gateway route
+  kubernetes.core.k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    namespace: aap
+  register: _aap_routes
+  until: >-
+    _aap_routes.resources | selectattr('metadata.name', 'match', '.*gateway.*|^aap.*') | list | length > 0
+  retries: 30
+  delay: 10
+
+- name: Set AAP URL
+  ansible.builtin.set_fact:
+    aia_aap_url: >-
+      https://{{ (_aap_routes.resources
+        | selectattr('metadata.name', 'match', '.*gateway.*|^aap.*')
+        | first).spec.host }}
+
+- name: Wait for AAP Gateway API
+  ansible.builtin.uri:
+    url: "{{ aia_aap_url }}/api/gateway/v1/ping/"
+    method: GET
+    validate_certs: false
+    status_code: [200]
+  register: _aap_ping
+  until: _aap_ping.status | default(0) == 200
+  retries: 90
+  delay: 15
+
+- name: Wait for AAP Controller API
+  ansible.builtin.uri:
+    url: "{{ aia_aap_url }}/api/controller/v2/ping/"
+    method: GET
+    validate_certs: false
+    status_code: [200]
+  register: _aap_ctl_ping
+  until: _aap_ctl_ping.status | default(0) == 200
+  retries: 60
+  delay: 15
+
+# ── AAP License ──────────────────────────────────────────────────
+- name: Check AAP license
+  ansible.builtin.uri:
+    url: "{{ aia_aap_url }}/api/controller/v2/config/"
+    method: GET
+    user: admin
+    password: "{{ aia_aap_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200, 402, 403]
+  register: _aap_config
+
+- name: Upload AAP manifest
+  when: >-
+    aia_aap_manifest_path | length > 0 and
+    _aap_config.json.license_info.valid_key | default(false) != true
+  block:
+    - name: Read manifest
+      ansible.builtin.slurp:
+        src: "{{ aia_aap_manifest_path }}"
+      register: _manifest
+
+    - name: POST manifest
+      ansible.builtin.uri:
+        url: "{{ aia_aap_url }}/api/controller/v2/config/"
+        method: POST
+        body_format: json
+        body:
+          eula_accepted: true
+          manifest: "{{ _manifest.content }}"
+        user: admin
+        password: "{{ aia_aap_admin_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        status_code: [200, 204]
+
+# ── Validate Dev Spaces (pre-installed) ──────────────────────────
+- name: Verify CheCluster is active
+  kubernetes.core.k8s_info:
+    api_version: org.eclipse.che/v2
+    kind: CheCluster
+    namespace: openshift-devspaces
+  register: _che
+  until: >-
+    _che.resources | length > 0 and
+    (_che.resources[0].status.chePhase | default('')) == 'Active'
+  retries: 30
+  delay: 10
+
+- name: Report cluster setup complete
+  ansible.builtin.debug:
+    msg: >-
+      Cluster setup complete — AAP at {{ aia_aap_url }},
+      Dev Spaces at {{ _che.resources[0].status.cheURL | default('not found') }}

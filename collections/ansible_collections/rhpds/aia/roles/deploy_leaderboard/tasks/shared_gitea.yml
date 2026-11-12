@@ -1,0 +1,250 @@
+---
+- name: Create gitea namespace
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ aia_gitea_namespace }}"
+
+- name: Grant anyuid SCC to gitea service accounts
+  ansible.builtin.command:
+    argv: [oc, adm, policy, add-scc-to-user, anyuid, -z, default, -n, "{{ aia_gitea_namespace }}"]
+  changed_when: true
+
+- name: Create Gitea PostgreSQL PVC
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: gitea-postgres-pvc
+        namespace: "{{ aia_gitea_namespace }}"
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: "{{ aia_gitea_postgres_volume_size }}"
+
+- name: Deploy Gitea PostgreSQL
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: gitea-postgres
+        namespace: "{{ aia_gitea_namespace }}"
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: gitea-postgres
+        template:
+          metadata:
+            labels:
+              app: gitea-postgres
+          spec:
+            containers:
+              - name: postgres
+                image: "{{ aia_gitea_postgres_image }}"
+                env:
+                  - name: POSTGRES_USER
+                    value: "{{ aia_gitea_postgres_user }}"
+                  - name: POSTGRES_PASSWORD
+                    value: "{{ aia_gitea_postgres_password }}"
+                  - name: POSTGRES_DB
+                    value: "{{ aia_gitea_postgres_database }}"
+                  - name: PGDATA
+                    value: /var/lib/postgresql/data/pgdata
+                ports:
+                  - containerPort: 5432
+                resources: "{{ aia_resources.gitea_postgres }}"
+                volumeMounts:
+                  - name: data
+                    mountPath: /var/lib/postgresql/data
+            volumes:
+              - name: data
+                persistentVolumeClaim:
+                  claimName: gitea-postgres-pvc
+
+- name: Create Gitea PostgreSQL Service
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: gitea-postgres
+        namespace: "{{ aia_gitea_namespace }}"
+      spec:
+        selector:
+          app: gitea-postgres
+        ports:
+          - port: 5432
+            targetPort: 5432
+
+- name: Wait for Gitea PostgreSQL
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: gitea-postgres
+    namespace: "{{ aia_gitea_namespace }}"
+  register: _pg
+  until: (_pg.resources[0].status.readyReplicas | default(0)) >= 1
+  retries: "{{ aia_k8s_retries }}"
+  delay: "{{ aia_k8s_retry_delay }}"
+
+- name: Create Gitea data PVC
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: gitea-data-pvc
+        namespace: "{{ aia_gitea_namespace }}"
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: "{{ aia_gitea_volume_size }}"
+
+- name: Deploy Gitea
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: gitea
+        namespace: "{{ aia_gitea_namespace }}"
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: gitea
+        template:
+          metadata:
+            labels:
+              app: gitea
+          spec:
+            securityContext:
+              runAsUser: 1000
+              fsGroup: 1000
+            containers:
+              - name: gitea
+                image: "{{ aia_gitea_image }}"
+                env:
+                  - name: GITEA__database__DB_TYPE
+                    value: postgres
+                  - name: GITEA__database__HOST
+                    value: "gitea-postgres:5432"
+                  - name: GITEA__database__NAME
+                    value: "{{ aia_gitea_postgres_database }}"
+                  - name: GITEA__database__USER
+                    value: "{{ aia_gitea_postgres_user }}"
+                  - name: GITEA__database__PASSWD
+                    value: "{{ aia_gitea_postgres_password }}"
+                  - name: GITEA__server__DOMAIN
+                    value: "gitea-{{ aia_gitea_namespace }}.{{ aia_cluster_apps_domain }}"
+                  - name: GITEA__server__ROOT_URL
+                    value: "https://gitea-{{ aia_gitea_namespace }}.{{ aia_cluster_apps_domain }}/"
+                  - name: GITEA__server__HTTP_PORT
+                    value: "3000"
+                  - name: GITEA__server__DISABLE_SSH
+                    value: "true"
+                  - name: GITEA__service__DISABLE_REGISTRATION
+                    value: "true"
+                  - name: GITEA__openid__ENABLE_OPENID_SIGNIN
+                    value: "false"
+                  - name: GITEA__openid__ENABLE_OPENID_SIGNUP
+                    value: "false"
+                  - name: GITEA__picture__DISABLE_GRAVATAR
+                    value: "true"
+                  - name: GITEA__security__INSTALL_LOCK
+                    value: "true"
+                ports:
+                  - containerPort: 3000
+                resources: "{{ aia_resources.gitea }}"
+                volumeMounts:
+                  - name: data
+                    mountPath: /var/lib/gitea
+            volumes:
+              - name: data
+                persistentVolumeClaim:
+                  claimName: gitea-data-pvc
+
+- name: Create Gitea Service
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: gitea
+        namespace: "{{ aia_gitea_namespace }}"
+      spec:
+        selector:
+          app: gitea
+        ports:
+          - port: 3000
+            targetPort: 3000
+
+- name: Create Gitea Route
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: route.openshift.io/v1
+      kind: Route
+      metadata:
+        name: gitea
+        namespace: "{{ aia_gitea_namespace }}"
+      spec:
+        host: "gitea-{{ aia_gitea_namespace }}.{{ aia_cluster_apps_domain }}"
+        to:
+          kind: Service
+          name: gitea
+        port:
+          targetPort: 3000
+        tls:
+          termination: edge
+          insecureEdgeTerminationPolicy: Redirect
+
+- name: Wait for Gitea
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: gitea
+    namespace: "{{ aia_gitea_namespace }}"
+  register: _gitea
+  until: (_gitea.resources[0].status.readyReplicas | default(0)) >= 1
+  retries: "{{ aia_k8s_retries }}"
+  delay: "{{ aia_k8s_retry_delay }}"
+
+- name: Create Gitea admin user
+  ansible.builtin.command:
+    argv:
+      - oc
+      - exec
+      - deploy/gitea
+      - -c
+      - gitea
+      - -n
+      - "{{ aia_gitea_namespace }}"
+      - --
+      - gitea
+      - admin
+      - user
+      - create
+      - "--config=/etc/gitea/app.ini"
+      - "--username={{ aia_gitea_admin_user }}"
+      - "--password={{ aia_gitea_admin_password }}"
+      - "--email={{ aia_gitea_admin_email }}"
+      - --admin
+      - --must-change-password=false
+  register: _ga
+  changed_when: "'created' in (_ga.stdout | default(''))"
+  failed_when: _ga.rc != 0 and 'already exists' not in (_ga.stderr | default('')) and 'already exists' not in (_ga.stdout | default(''))

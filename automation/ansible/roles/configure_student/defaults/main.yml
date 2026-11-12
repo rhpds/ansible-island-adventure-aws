@@ -1,0 +1,12 @@
+---
+aia_validate_certs: true
+aia_student_repositories:
+  - name: ansible-survival-kit
+    branches: [main, treasurehunt]
+  - name: aia-instructor
+    branches: [main]
+
+# Organizers retain the upstream key; students use only their provisioned password.
+aia_lab_password: "{{ common_password }}"
+aia_instructor_vault_password_file: "{{ playbook_dir }}/../../.vault-password"
+aia_instructor_vault_source_password: "{{ lookup('ansible.builtin.file', aia_instructor_vault_password_file) }}"

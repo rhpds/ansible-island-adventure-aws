@@ -1,0 +1,15 @@
+---
+- name: Load CTFd content after student catalog deployment
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Prepare OpenShift CLI access
+      ansible.builtin.include_role:
+        name: instructor_config
+        tasks_from: oc_login
+
+    - name: Configure CTFd content
+      ansible.builtin.include_role:
+        name: instructor_config
+        tasks_from: ctfd_config

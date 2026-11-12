@@ -1,0 +1,23 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ansible-island-adventure-aws
+  title: Ansible Island Adventure AWS Automation
+  description: AWS-specific custom automation for the LB1663 lab.
+  annotations:
+    github.com/project-slug: rhpds/ansible-island-adventure-aws
+  tags:
+    - ansible
+    - aws
+  links:
+    - url: https://github.com/rhpds/ansible-island-adventure-aws
+      title: AWS automation source
+      icon: github
+    - url: https://redhat.atlassian.net/browse/RHDPCD-1137
+      title: Jira
+      icon: dashboard
+spec:
+  type: library
+  lifecycle: experimental
+  owner: rhdp-team

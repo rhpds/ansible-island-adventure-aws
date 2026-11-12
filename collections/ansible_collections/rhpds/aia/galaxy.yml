@@ -1,0 +1,13 @@
+---
+namespace: rhpds
+name: aia
+version: 1.0.0
+readme: README.md
+description: Ansible Island Adventure deployment collection
+authors:
+  - Matt Fernandez <matferna@redhat.com>
+license:
+  - Apache-2.0
+dependencies:
+  kubernetes.core: ">=2.4.0"
+  community.general: ">=6.0.0"

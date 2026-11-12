@@ -1,0 +1,13 @@
+---
+# ── Required inputs ─────────────────────────────────────────────
+aia_aap_url: ""         # AAP Gateway URL (from leaderboard deploy)
+aia_aap_admin_password: ""  # AAP admin password (from leaderboard deploy)
+
+# ── VM Configuration ────────────────────────────────────────────
+aia_vm_image_source: rhel9
+aia_vm_ssh_user: student
+aia_vm_env: ""          # Path to VM cluster ResourceClaim YAML
+
+# ── Instructors ─────────────────────────────────────────────────
+# List of instructor dicts: [{name, password, lab_ns}, ...]
+aia_instructors: []

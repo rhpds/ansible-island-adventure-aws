@@ -1,0 +1,11 @@
+---
+namespace: "ansible_island_adventure"
+name: "automation"
+version: "1.0.0"
+readme: README.md
+authors:
+  - "Matt Fernandez <matferna@redhat.com>"
+description: "Ansible Island Adventure AWS — isolated AWS deployment and configuration automation."
+license:
+  - "Apache-2.0"
+repository: "https://github.com/rhpds/ansible-island-adventure-aws"

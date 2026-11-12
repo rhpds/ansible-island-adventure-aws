@@ -1,0 +1,88 @@
+---
+# Configure AAP resources for one instructor.
+
+- name: "{{ _inst.name }} — Look up org ID"
+  ansible.builtin.uri:
+    url: "{{ aap_url }}/api/gateway/v1/organizations/?name={{ _inst.name }}"
+    method: GET
+    user: admin
+    password: "{{ aap_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+  register: _org
+
+- name: "{{ _inst.name }} — Set org ID"
+  ansible.builtin.set_fact:
+    _org_id: "{{ _org.json.results[0].id }}"
+
+# ── Inventory with managed node ──────────────────────────────────
+- name: "{{ _inst.name }} — Create inventory"
+  ansible.builtin.uri:
+    url: "{{ aap_url }}/api/controller/v2/inventories/"
+    method: POST
+    body_format: json
+    body:
+      name: "Workshop Inventory"
+      organization: "{{ _org_id }}"
+      description: "Managed node for {{ _inst.name }}"
+    user: "{{ _inst.name }}"
+    password: "{{ _inst.password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [201, 400]
+
+- name: "{{ _inst.name }} — Look up inventory ID"
+  ansible.builtin.uri:
+    url: "{{ aap_url }}/api/controller/v2/inventories/?name=Workshop+Inventory&organization={{ _org_id }}"
+    method: GET
+    user: "{{ _inst.name }}"
+    password: "{{ _inst.password }}"
+    force_basic_auth: true
+    validate_certs: false
+  register: _inv
+
+- name: "{{ _inst.name }} — Add managed node host to inventory"
+  ansible.builtin.uri:
+    url: "{{ aap_url }}/api/controller/v2/hosts/"
+    method: POST
+    body_format: json
+    body:
+      name: "{{ _inst.name }}-node.{{ _inst.lab_ns }}.svc.cluster.local"
+      inventory: "{{ _inv.json.results[0].id }}"
+      variables: |
+        ansible_host: {{ _inst.name }}-node.{{ _inst.lab_ns }}.svc.cluster.local
+        ansible_user: {{ vm_ssh_user }}
+        ansible_password: {{ _inst.password }}
+        ansible_become: true
+    user: "{{ _inst.name }}"
+    password: "{{ _inst.password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [201, 400]
+  no_log: true
+
+# ── Machine Credential ───────────────────────────────────────────
+- name: "{{ _inst.name }} — Create machine credential"
+  ansible.builtin.uri:
+    url: "{{ aap_url }}/api/controller/v2/credentials/"
+    method: POST
+    body_format: json
+    body:
+      name: "Machine Credential"
+      organization: "{{ _org_id }}"
+      credential_type: 1
+      inputs:
+        username: "{{ vm_ssh_user }}"
+        password: "{{ _inst.password }}"
+        become_method: sudo
+    user: "{{ _inst.name }}"
+    password: "{{ _inst.password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [201, 400]
+  no_log: true
+
+- name: "{{ _inst.name }} — Report AAP configured"
+  ansible.builtin.debug:
+    msg: >-
+      AAP for {{ _inst.name }}: inventory (1 host), machine credential

@@ -1,0 +1,32 @@
+---
+- name: Prepare OpenShift CLI access
+  ansible.builtin.include_tasks: oc_login.yml
+
+- name: "{{ instructor.name }} — Create namespaces"
+  ansible.builtin.include_tasks: namespaces.yml
+
+- name: "{{ instructor.name }} — Configure AWS managed-node route and Showroom access"
+  ansible.builtin.include_role:
+    name: aws_student_access
+  when: aia_aws_managed_node_host is defined
+
+- name: "{{ instructor.name }} — Deploy CTFd stack"
+  ansible.builtin.include_tasks: ctfd_install.yml
+
+
+- name: "{{ instructor.name }} — Configure Gitea users and repos"
+  ansible.builtin.include_tasks: gitea.yml
+
+- name: "{{ instructor.name }} — Create Keycloak SSO user"
+  ansible.builtin.include_tasks: keycloak.yml
+
+- name: "{{ instructor.name }} — Configure AAP org and access"
+  ansible.builtin.include_tasks: aap.yml
+
+- name: "{{ instructor.name }} — Bootstrap CTFd access"
+  ansible.builtin.include_tasks: ctfd_bootstrap.yml
+
+- name: "{{ instructor.name }} — Validate actual student runtime connectivity"
+  ansible.builtin.include_role:
+    name: student_readiness
+  when: instructor_config_validate_connectivity | bool

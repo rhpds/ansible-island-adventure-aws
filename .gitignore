@@ -1,0 +1,42 @@
+# Antora build output
+www/
+.cache/
+
+# Environment files (contain credentials)
+*.env
+.leaderboard.env
+
+# Ansible vault password
+.vault-password
+
+# CTFd build artifacts
+*.zip
+
+# Deploy output
+deploy-output.json
+provision-fields.txt
+provision-data.yaml
+student-data.yaml
+lb-creds.yaml
+student-creds.yaml
+
+# Provisioner data (contains credentials)
+job-vars.json
+job_*.txt
+ansible-error.txt
+provision-error.txt
+student-failed.yaml
+utils/.leaderboard.yaml
+utils/.student.yaml
+
+# Catalog session, order payloads, and ResourceClaim exports (contain credentials)
+.aia-dev/
+__pycache__/
+.venv/
+
+# Source-copy metadata belongs to the original CNV project, not this AWS repo.
+.claude/
+.claude.settings.template.json
+publishing-house/
+hooks/
+setup-claude-hooks.sh

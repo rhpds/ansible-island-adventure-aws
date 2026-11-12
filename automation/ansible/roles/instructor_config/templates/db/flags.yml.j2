@@ -1,0 +1,20 @@
+{% set ns = namespace(count=0, id=0) %}
+{% for c in _all_challenges %}
+{% for f in c.flags | default([]) %}
+{% set ns.count = ns.count + 1 %}
+{% endfor %}
+{% endfor %}
+count: {{ ns.count }}
+results:
+{% for c in _all_challenges %}
+{% set challenge_id = loop.index %}
+{% for f in c.flags | default([]) %}
+{% set ns.id = ns.id + 1 %}
+  - id: {{ ns.id }}
+    challenge_id: {{ challenge_id }}
+    type: {{ f.type | default('static') }}
+    content: {{ f.content | to_json }}
+    data: {{ f.data | default('') | to_json }}
+{% endfor %}
+{% endfor %}
+meta: {}

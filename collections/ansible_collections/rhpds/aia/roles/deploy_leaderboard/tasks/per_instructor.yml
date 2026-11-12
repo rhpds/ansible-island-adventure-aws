@@ -1,0 +1,122 @@
+---
+# Per-instructor: namespaces, CTFd stack, AAP org. No VMs.
+
+# ── Namespaces + RBAC ────────────────────────────────────────────
+- name: "{{ instructor.name }} — Create namespaces"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ item }}"
+        labels:
+          island-adventure/instructor: "{{ instructor.name }}"
+  loop:
+    - "{{ instructor.ctfd_ns }}"
+    - "{{ instructor.lab_ns }}"
+
+- name: "{{ instructor.name }} — Grant admin RoleBinding"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: "{{ instructor.name }}-admin"
+        namespace: "{{ item }}"
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: admin
+      subjects:
+        - apiGroup: rbac.authorization.k8s.io
+          kind: User
+          name: "{{ instructor.name }}"
+  loop:
+    - "{{ instructor.ctfd_ns }}"
+    - "{{ instructor.lab_ns }}"
+
+# ── CTFd Stack ───────────────────────────────────────────────────
+- name: "{{ instructor.name }} — Deploy CTFd stack"
+  ansible.builtin.include_tasks: ctfd_stack.yml
+
+# ── AAP Org ──────────────────────────────────────────────────────
+- name: "{{ instructor.name }} — Create AAP user"
+  ansible.builtin.uri:
+    url: "{{ aia_aap_url }}/api/gateway/v1/users/"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ instructor.name }}"
+      password: "{{ instructor.password }}"
+      email: "{{ instructor.name }}@island.local"
+      first_name: "{{ instructor.name }}"
+      is_superuser: false
+    user: admin
+    password: "{{ aia_aap_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [201, 400]
+
+- name: "{{ instructor.name }} — Look up AAP user ID"
+  ansible.builtin.uri:
+    url: "{{ aia_aap_url }}/api/gateway/v1/users/?username={{ instructor.name }}"
+    method: GET
+    user: admin
+    password: "{{ aia_aap_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+  register: _aap_user
+
+- name: "{{ instructor.name }} — Update AAP password"
+  ansible.builtin.uri:
+    url: "{{ aia_aap_url }}/api/gateway/v1/users/{{ _aap_user.json.results[0].id }}/"
+    method: PATCH
+    body_format: json
+    body:
+      password: "{{ instructor.password }}"
+    user: admin
+    password: "{{ aia_aap_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+
+- name: "{{ instructor.name }} — Create AAP organization"
+  ansible.builtin.uri:
+    url: "{{ aia_aap_url }}/api/gateway/v1/organizations/"
+    method: POST
+    body_format: json
+    body:
+      name: "{{ instructor.name }}"
+      description: "Organization for instructor {{ instructor.name }}"
+    user: admin
+    password: "{{ aia_aap_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [201, 400]
+
+- name: "{{ instructor.name }} — Look up org ID"
+  ansible.builtin.uri:
+    url: "{{ aia_aap_url }}/api/gateway/v1/organizations/?name={{ instructor.name }}"
+    method: GET
+    user: admin
+    password: "{{ aia_aap_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+  register: _aap_org
+
+- name: "{{ instructor.name }} — Grant Organization Admin"
+  ansible.builtin.uri:
+    url: "{{ aia_aap_url }}/api/gateway/v1/role_user_assignments/"
+    method: POST
+    body_format: json
+    body:
+      user: "{{ _aap_user.json.results[0].id }}"
+      role_definition: 4
+      object_id: "{{ _aap_org.json.results[0].id }}"
+    user: admin
+    password: "{{ aia_aap_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [201, 400, 409]

@@ -1,0 +1,61 @@
+---
+# Load cluster connection details from .leaderboard.env or direct variables.
+
+- name: Load leaderboard env file
+  when: aia_leaderboard_env | length > 0 and aia_cluster_api_url | length == 0
+  block:
+    - name: Read leaderboard ResourceClaim
+      ansible.builtin.include_vars:
+        file: "{{ aia_leaderboard_env }}"
+        name: _lb_claim
+
+    - name: Extract cluster details from provision data
+      ansible.builtin.set_fact:
+        aia_cluster_api_url: "{{ _lb_claim.status.summary.provision_data.openshift_api_url }}"
+        aia_cluster_admin_username: "{{ _lb_claim.status.summary.provision_data.openshift_cluster_admin_username }}"
+        aia_cluster_admin_password: "{{ _lb_claim.status.summary.provision_data.openshift_cluster_admin_password }}"
+        aia_cluster_apps_domain: "{{ _lb_claim.status.summary.provision_data.openshift_cluster_ingress_domain }}"
+
+    - name: Extract Keycloak details if available
+      ansible.builtin.set_fact:
+        aia_keycloak_url: "{{ _lb_claim.status.summary.provision_data.keycloak_admin_console | default('') }}"
+        aia_keycloak_admin_user: "{{ _lb_claim.status.summary.provision_data.keycloak_admin_user | default('') }}"
+        aia_keycloak_admin_password: "{{ _lb_claim.status.summary.provision_data.keycloak_admin_password | default('') }}"
+
+    - name: Extract pre-provisioned users if present
+      ansible.builtin.set_fact:
+        _cluster_users: "{{ _lb_claim.status.summary.provision_data.users | default({}) }}"
+
+- name: Build instructor list from cluster users
+  when: aia_instructors | length == 0 and (_cluster_users | default({}) | length > 0)
+  ansible.builtin.set_fact:
+    aia_instructors: >-
+      {{ aia_instructors | default([]) + [{
+        'name': item.key,
+        'password': item.value.password,
+        'ctfd_ns': item.key ~ '-' ~ aia_ctfd_ns_suffix,
+        'lab_ns': item.key ~ '-' ~ aia_lab_ns_suffix
+      }] }}
+  loop: "{{ _cluster_users | dict2items | sort(attribute='key') }}"
+
+- name: Generate instructors if none from env
+  when: aia_instructors | length == 0
+  block:
+    - name: Generate instructor list
+      ansible.builtin.set_fact:
+        aia_instructors: >-
+          {{ aia_instructors | default([]) + [{
+            'name': 'instructor' ~ item,
+            'password': lookup('password', '/dev/null length=16 chars=ascii_letters,digits'),
+            'ctfd_ns': 'instructor' ~ item ~ '-' ~ aia_ctfd_ns_suffix,
+            'lab_ns': 'instructor' ~ item ~ '-' ~ aia_lab_ns_suffix
+          }] }}
+      loop: "{{ range(1, (aia_instructor_count | int) + 1) | list }}"
+
+- name: Display deployment plan
+  ansible.builtin.debug:
+    msg: >-
+      Leaderboard deploy: {{ aia_instructors | length }} instructors
+      ({{ aia_instructors | map(attribute='name') | list | join(', ') }})
+      on {{ aia_cluster_api_url }}
+      (apps: {{ aia_cluster_apps_domain }})

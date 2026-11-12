@@ -1,0 +1,97 @@
+---
+- name: "{{ instructor.name }} — Initialize CTFd settings and users"
+  ansible.builtin.command:
+    argv:
+      - timeout
+      - --verbose
+      - --kill-after=5s
+      - "{{ ctfd_bootstrap_timeout }}s"
+      - oc
+      - exec
+      - deploy/ctfd
+      - -n
+      - "{{ instructor.ctfd_ns }}"
+      - --
+      - python3
+      - -u
+      - -c
+      - |
+        from CTFd import create_app
+        app = create_app()
+        with app.app_context():
+            from CTFd.models import db
+            from CTFd.cache import cache
+            from CTFd.utils import get_config, set_config
+            from CTFd.utils.crypto import hash_password, verify_password
+            from sqlalchemy import text
+            results = []
+            for uname, upass, uemail, utype in [
+                ({{ ctfd_admin_username | to_json }}, {{ ctfd_admin_password | to_json }}, {{ ctfd_admin_email | to_json }}, "admin"),
+                ({{ student_name | to_json }}, {{ common_password | to_json }}, {{ (student_name ~ '@island.local') | to_json }}, "user"),
+            ]:
+                exists = db.session.execute(
+                    text("SELECT id FROM users WHERE name = :n"), {"n": uname}
+                ).scalar()
+                if exists:
+                    current = db.session.execute(
+                        text("SELECT password FROM users WHERE name = :n"), {"n": uname}
+                    ).scalar()
+                    if not current or not verify_password(upass, current):
+                        db.session.execute(
+                            text("UPDATE users SET password = :p WHERE name = :n"),
+                            {"p": hash_password(upass), "n": uname},
+                        )
+                        results.append(f"UPDATED:{uname}")
+                else:
+                    db.session.execute(
+                        text("INSERT INTO users (name, email, password, type, hidden, banned, verified) "
+                             "VALUES (:n, :e, :p, :t, :h, 0, 0)"),
+                        {"n": uname, "e": uemail, "p": hash_password(upass), "t": utype,
+                         "h": 1 if utype == "admin" else 0},
+                    )
+                    results.append(f"CREATED:{uname}")
+                db.session.commit()
+                ok = verify_password(upass, db.session.execute(
+                    text("SELECT password FROM users WHERE name = :n"), {"n": uname}
+                ).scalar())
+                if not ok:
+                    raise RuntimeError(f"Password verification failed for {uname}")
+            # Initialize fresh instances without importing challenge archives.
+            # Preserve event settings and pages on subsequent provisioning runs.
+            if not get_config("setup"):
+                for key, value in {
+                    "ctf_name": "Ansible Island Adventure",
+                    "ctf_description": "Ansible Island Adventure CTF Challenge",
+                    "user_mode": "users",
+                    "challenge_visibility": "private",
+                    "registration_visibility": "private",
+                    "score_visibility": "public",
+                    "account_visibility": "public",
+                }.items():
+                    set_config(key, value)
+                index = db.session.execute(
+                    text("SELECT id FROM pages WHERE route = 'index'")
+                ).scalar()
+                if not index:
+                    db.session.execute(text(
+                        "INSERT INTO pages (title, route, content, draft, format) "
+                        "VALUES ('Ansible Island Adventure', 'index', "
+                        "'<p>Challenge content will be loaded after deployment. "
+                        "<a href=\"/login\">Log in</a></p>', 0, 'markdown')"
+                    ))
+                    db.session.commit()
+                set_config("setup", True)
+                results.append("CONFIGURED:setup")
+            if results:
+                cache.clear()
+            for r in results:
+                print(r)
+  register: _ctfd_user
+  changed_when: >-
+    (_ctfd_user.stdout | default('') | regex_search('CREATED:|UPDATED:|CONFIGURED:')) is not none
+  retries: "{{ ctfd_bootstrap_retries }}"
+  delay: "{{ ctfd_bootstrap_delay }}"
+  until: (_ctfd_user.rc | default(1)) == 0
+  no_log: true
+  environment:
+    PATH: "/usr/local/bin:{{ ansible_env.PATH }}"

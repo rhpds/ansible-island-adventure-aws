@@ -1,0 +1,11 @@
+---
+# This entry point needs only the exported inventory; no event vault is loaded.
+- name: Validate deployed student resource connectivity
+  hosts: aia_students
+  connection: local
+  gather_facts: false
+  environment:
+    KUBECONFIG: "{{ aia_kubeconfig }}"
+  roles:
+    - role: validate_connectivity
+      tags: [readiness]

@@ -1,0 +1,97 @@
+---
+# Fix Keycloak logout loop: enables front-channel logout on the OpenShift
+# OAuth client so that logging out of OCP console also kills the SSO session.
+
+- name: Get Keycloak admin token
+  ansible.builtin.uri:
+    url: "{{ keycloak_admin_console }}/realms/master/protocol/openid-connect/token"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      client_id: admin-cli
+      username: "{{ keycloak_admin_user }}"
+      password: "{{ keycloak_admin_password }}"
+      grant_type: password
+    validate_certs: false
+    status_code: 200
+  register: _kc_token
+  no_log: true
+
+- name: Set Keycloak admin token fact
+  ansible.builtin.set_fact:
+    _kc_admin_token: "{{ _kc_token.json.access_token }}"
+  no_log: true
+
+- name: List all clients in realm {{ keycloak_realm }}
+  ansible.builtin.uri:
+    url: "{{ keycloak_admin_console }}/admin/realms/{{ keycloak_realm }}/clients?max=200"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ _kc_admin_token }}"
+    validate_certs: false
+    status_code: 200
+  register: _kc_clients
+
+- name: Find OpenShift OAuth client
+  ansible.builtin.set_fact:
+    _ocp_client: >-
+      {{
+        _kc_clients.json
+        | selectattr('clientId', 'equalto', keycloak_ocp_client_id)
+        | list | first
+        if keycloak_ocp_client_id | length > 0
+        else
+        _kc_clients.json
+        | selectattr('clientId', 'search', 'openshift|idp-4-ocp')
+        | list | first
+      }}
+
+- name: Fail if no OpenShift client found
+  ansible.builtin.fail:
+    msg: >-
+      No Keycloak client matching 'openshift' found in realm {{ keycloak_realm }}.
+      Set keycloak_ocp_client_id explicitly or check the client configuration.
+  when: _ocp_client is not defined or _ocp_client | length == 0
+
+- name: Show discovered OCP client
+  ansible.builtin.debug:
+    msg: "Found OCP client: {{ _ocp_client.clientId }} (id: {{ _ocp_client.id }})"
+
+- name: Enable front-channel logout on OCP OAuth client
+  ansible.builtin.uri:
+    url: "{{ keycloak_admin_console }}/admin/realms/{{ keycloak_realm }}/clients/{{ _ocp_client.id }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ _kc_admin_token }}"
+      Content-Type: application/json
+    body_format: json
+    body: >-
+      {{
+        _ocp_client | combine({
+          'frontchannelLogout': true,
+          'attributes': (_ocp_client.attributes | default({})) | combine({
+            'frontchannel.logout.url': keycloak_ocp_logout_url,
+            'frontchannel.logout.session.required': 'true'
+          })
+        })
+      }}
+    validate_certs: false
+    status_code: 204
+
+- name: Verify front-channel logout is set
+  ansible.builtin.uri:
+    url: "{{ keycloak_admin_console }}/admin/realms/{{ keycloak_realm }}/clients/{{ _ocp_client.id }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ _kc_admin_token }}"
+    validate_certs: false
+    status_code: 200
+  register: _updated_client
+
+- name: Report logout fix applied
+  ansible.builtin.debug:
+    msg: |
+      Keycloak front-channel logout configured:
+        Client:      {{ _updated_client.json.clientId }}
+        Logout URL:  {{ _updated_client.json.attributes['frontchannel.logout.url'] | default('NOT SET') }}
+        Enabled:     {{ _updated_client.json.frontchannelLogout }}

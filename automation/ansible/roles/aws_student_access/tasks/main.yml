@@ -1,0 +1,77 @@
+---
+# Runs after instructor namespaces exist and oc_login selected the leaderboard.
+- name: Require explicit AWS managed-node endpoints
+  ansible.builtin.assert:
+    that:
+      - cloud_provider == 'aws'
+      - aia_aws_managed_node_host | length > 0
+      - aia_aws_managed_node_ip is match('^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$')
+      - aia_aws_managed_node_port | int == 22
+      - aia_aws_managed_node_web_url == 'https://treasure-' ~ guid ~ '.' ~ openshift_cluster_ingress_domain
+    fail_msg: AWS student access requires the provisioned EC2 public endpoint and leaderboard ingress domain.
+
+- name: Read the selected leaderboard token for Showroom
+  ansible.builtin.command:
+    argv: "{{ ['oc'] + (['--kubeconfig=' ~ aia_kubeconfig] if aia_kubeconfig is defined else []) + ['whoami', '-t'] }}"
+  register: _aia_aws_showroom_token
+  changed_when: false
+  no_log: true
+
+- name: Require a nonempty leaderboard token
+  ansible.builtin.assert:
+    that:
+      - _aia_aws_showroom_token.stdout | trim | length > 0
+  no_log: true
+
+- name: Bind Showroom explicitly to the AWS leaderboard
+  ansible.builtin.set_fact:
+    ocp4_workload_showroom_openshift_api_token: "{{ _aia_aws_showroom_token.stdout | trim }}"
+  no_log: true
+
+# TLS terminates at OpenShift; the challenge playbook installs Apache on port 80.
+# No web content is installed here, so the learner's treasure challenge is preserved.
+- name: Expose this EC2 managed node through the leaderboard HTTPS router
+  kubernetes.core.k8s:
+    kubeconfig: "{{ aia_kubeconfig | default(omit) }}"
+    state: present
+    definition:
+      - apiVersion: v1
+        kind: Service
+        metadata:
+          name: treasure
+          namespace: "{{ instructor.lab_ns }}"
+          labels:
+            island-adventure/instructor: "{{ instructor.name }}"
+        spec:
+          ports:
+            - name: http
+              port: 80
+              targetPort: 80
+              protocol: TCP
+      - apiVersion: v1
+        kind: Endpoints
+        metadata:
+          name: treasure
+          namespace: "{{ instructor.lab_ns }}"
+        subsets:
+          - addresses:
+              - ip: "{{ aia_aws_managed_node_ip }}"
+            ports:
+              - name: http
+                port: 80
+                protocol: TCP
+      - apiVersion: route.openshift.io/v1
+        kind: Route
+        metadata:
+          name: treasure
+          namespace: "{{ instructor.lab_ns }}"
+        spec:
+          host: "treasure-{{ guid }}.{{ openshift_cluster_ingress_domain }}"
+          to:
+            kind: Service
+            name: treasure
+          port:
+            targetPort: http
+          tls:
+            termination: edge
+            insecureEdgeTerminationPolicy: Redirect

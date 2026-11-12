@@ -1,0 +1,251 @@
+---
+# Explicit post-deployment content loading; not part of catalog provisioning.
+- name: Load challenge definitions (if not already provided)
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/vars/challenges.yml"
+  when: ctfd_challenges | length == 0
+
+- name: "{{ instructor.name }} — Wait for CTFd service"
+  ansible.builtin.include_tasks: ctfd_ready.yml
+
+- name: "{{ instructor.name }} — Initialize CTFd settings and accounts"
+  ansible.builtin.include_tasks: ctfd_users.yml
+
+- name: Merge challenge lists
+  ansible.builtin.set_fact:
+    _all_challenges: "{{ ctfd_challenges + ctfd_challenges_advanced }}"
+
+- name: Build challenge name→ID map for prerequisites
+  ansible.builtin.set_fact:
+    _challenge_name_to_id: >-
+      {{ _challenge_name_to_id | default({}) | combine({item.name: idx + 1}) }}
+  loop: "{{ _all_challenges }}"
+  loop_control:
+    index_var: idx
+  no_log: true
+
+# ── Build archive directory ──────────────────────────────────────
+- name: "{{ instructor.name }} — Create archive temp directory"
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: "ctfd-{{ instructor.name }}-"
+  register: _archive_dir
+
+- name: "{{ instructor.name }} — Create db subdirectory"
+  ansible.builtin.file:
+    path: "{{ _archive_dir.path }}/db"
+    state: directory
+    mode: "0755"
+
+- name: "{{ instructor.name }} — Copy static DB stubs as YAML"
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ _archive_dir.path }}/db/{{ item | basename }}"
+    mode: "0644"
+  loop: "{{ lookup('fileglob', role_path + '/files/*.yml', wantlist=True) }}"
+
+- name: "{{ instructor.name }} — Template dynamic DB files as YAML"
+  ansible.builtin.template:
+    src: "db/{{ item }}.yml.j2"
+    dest: "{{ _archive_dir.path }}/db/{{ item }}.yml"
+    mode: "0644"
+  loop:
+    - challenges
+    - flags
+    - hints
+    - config
+    - users
+
+- name: "{{ instructor.name }} — Convert YAML DB files to JSON"
+  ansible.builtin.copy:
+    content: "{{ lookup('file', item) | from_yaml | to_json }}"
+    dest: "{{ item | regex_replace('\\.yml$', '.json') }}"
+    mode: "0644"
+  loop: "{{ query('fileglob', _archive_dir.path + '/db/*.yml') }}"
+
+- name: "{{ instructor.name }} — Remove YAML files from db dir"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ query('fileglob', _archive_dir.path + '/db/*.yml') }}"
+
+- name: "{{ instructor.name }} — Copy uploads directory"
+  ansible.builtin.copy:
+    src: uploads/
+    dest: "{{ _archive_dir.path }}/uploads/"
+    mode: "0644"
+
+- name: "{{ instructor.name }} — Build ZIP archive"
+  community.general.archive:
+    path:
+      - "{{ _archive_dir.path }}/db"
+      - "{{ _archive_dir.path }}/uploads"
+    dest: "{{ _archive_dir.path }}/ctfd-import.zip"
+    format: zip
+
+# ── Upload to CTFd ───────────────────────────────────────────────
+- name: "{{ instructor.name }} — Check if challenges already loaded"
+  ansible.builtin.command:
+    argv:
+      # Keep the deadline independent of Ansible's async job cache, whose
+      # launch/poll paths can differ inside provisioning execution environments.
+      - timeout
+      - --verbose
+      - --kill-after=5s
+      - "{{ ctfd_challenge_check_timeout }}s"
+      - oc
+      - exec
+      - deploy/ctfd
+      - -n
+      - "{{ instructor.ctfd_ns }}"
+      - --
+      - python3
+      - -u
+      - -c
+      - |
+        from CTFd import create_app
+        app = create_app()
+        with app.app_context():
+            from CTFd.models import Challenges
+            print("CHALLENGE_COUNT:" + str(Challenges.query.count()))
+  register: _existing_challenges
+  changed_when: false
+  # CTFd may print startup messages. Accept exactly one explicit count, and
+  # preserve command failures (including stderr) instead of assuming zero.
+  failed_when: >-
+    (_existing_challenges.rc | default(1)) != 0 or
+    (_existing_challenges.stdout | default('') |
+     regex_findall('(?m)^CHALLENGE_COUNT:([0-9]+)$') | length) != 1
+  until: _existing_challenges is succeeded
+  retries: "{{ ctfd_challenge_check_retries }}"
+  delay: "{{ ctfd_challenge_check_delay }}"
+  environment:
+    PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
+
+- name: "{{ instructor.name }} — Record existing challenge count"
+  ansible.builtin.set_fact:
+    _existing_challenge_count: >-
+      {{ _existing_challenges.stdout |
+         regex_findall('(?m)^CHALLENGE_COUNT:([0-9]+)$') | first | int }}
+
+- name: "{{ instructor.name }} — Setup, login, and import CTFd archive"
+  when: _existing_challenge_count | int == 0
+  ansible.builtin.shell: |
+    set -eo pipefail
+    URL="{{ _ctfd_base_url }}"
+    ADMIN="{{ ctfd_admin_username }}"
+    PASS="{{ ctfd_admin_password }}"
+    EMAIL="{{ ctfd_admin_email }}"
+    ARCHIVE="{{ _archive_dir.path }}/ctfd-import.zip"
+    COOKIES=$(mktemp)
+    trap "rm -f $COOKIES" EXIT
+
+    # Step 1: Complete initial setup if needed
+    SETUP_CODE=$(curl -sk -o /dev/null -w '%{http_code}' "$URL/setup")
+    if [ "$SETUP_CODE" = "200" ]; then
+      NONCE=$(curl -sk "$URL/setup" -c "$COOKIES" -b "$COOKIES" \
+        | python3 -c "import re,sys; m=re.search(r'name=\"nonce\"[^>]*value=\"([^\"]+)\"', sys.stdin.read()); print(m.group(1) if m else '')")
+      if [ -z "$NONCE" ]; then
+        echo "ERROR: Could not extract setup nonce"
+        exit 1
+      fi
+      SETUP_RESULT=$(curl -sk -o /dev/null -w '%{http_code}' \
+        -b "$COOKIES" -c "$COOKIES" -L \
+        -d "nonce=$NONCE&ctf_name=Island+Adventure&ctf_description=CTF&user_mode=users&name=$ADMIN&email=$EMAIL&password=$PASS" \
+        "$URL/setup")
+      echo "SETUP: $SETUP_RESULT"
+      sleep 3
+    fi
+
+    # Step 2: Login as admin
+    NONCE=$(curl -sk "$URL/login" -c "$COOKIES" -b "$COOKIES" \
+      | python3 -c "import re,sys; m=re.search(r'name=\"nonce\"[^>]*value=\"([^\"]+)\"', sys.stdin.read()); print(m.group(1) if m else '')")
+    if [ -z "$NONCE" ]; then
+      echo "ERROR: Could not extract login nonce"
+      exit 1
+    fi
+    LOGIN_RESULT=$(curl -sk -o /dev/null -w '%{http_code}' \
+      -b "$COOKIES" -c "$COOKIES" -L \
+      -d "name=$ADMIN&password=$PASS&nonce=$NONCE" \
+      "$URL/login")
+    if [ "$LOGIN_RESULT" != "200" ] && [ "$LOGIN_RESULT" != "302" ]; then
+      echo "ERROR: Login failed with HTTP $LOGIN_RESULT"
+      exit 1
+    fi
+
+    # Step 3: Get CSRF nonce from admin import page
+    IMPORT_PAGE=$(curl -sk "$URL/admin/import" -b "$COOKIES")
+    CSRF=$(echo "$IMPORT_PAGE" | python3 -c "import re,sys; m=re.search(r'csrfNonce.*?([0-9a-f]{64})', sys.stdin.read()); print(m.group(1) if m else '')")
+    if [ -z "$CSRF" ]; then
+      echo "ERROR: Could not get CSRF nonce — may not be logged in as admin"
+      exit 1
+    fi
+
+    # Step 4: Upload archive
+    IMPORT_RESULT=$(curl -sk -o /dev/null -w '%{http_code}' \
+      -b "$COOKIES" \
+      -F "nonce=$CSRF" -F "backup=@$ARCHIVE" \
+      "$URL/admin/import")
+    if [ "$IMPORT_RESULT" != "200" ] && [ "$IMPORT_RESULT" != "302" ]; then
+      echo "ERROR: Archive import failed with HTTP $IMPORT_RESULT"
+      exit 1
+    fi
+
+    echo "SUCCESS: Archive uploaded (HTTP $IMPORT_RESULT)"
+  args:
+    executable: /bin/bash
+  register: _ctfd_import
+  changed_when: "'SUCCESS' in (_ctfd_import.stdout | default(''))"
+  failed_when: >-
+    _ctfd_import.rc != 0 or
+    'ERROR' in (_ctfd_import.stdout | default(''))
+  no_log: true
+
+# ── Create instructor user via CTFd internals (no passlib needed) ─
+- name: "{{ instructor.name }} — Restore CTFd account passwords after archive import"
+  ansible.builtin.include_tasks: ctfd_users.yml
+
+- name: "{{ instructor.name }} — Verify challenges in database"
+  ansible.builtin.command:
+    argv:
+      - oc
+      - exec
+      - deploy/ctfd
+      - -n
+      - "{{ instructor.ctfd_ns }}"
+      - --
+      - python3
+      - -c
+      - |
+        from CTFd import create_app
+        app = create_app()
+        with app.app_context():
+            from CTFd.models import Challenges
+            print("CHALLENGE_COUNT:" + str(Challenges.query.count()))
+  register: _challenge_count
+  retries: 5
+  delay: 5
+  until: >-
+    (_challenge_count.stdout | regex_search('CHALLENGE_COUNT:(\d+)') | regex_replace('CHALLENGE_COUNT:', '') | int) >= (_all_challenges | length)
+  when: _all_challenges | length > 0
+  environment:
+    PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
+
+- name: "{{ instructor.name }} — Extract challenge count"
+  ansible.builtin.set_fact:
+    _loaded_challenge_count: >-
+      {{ (_challenge_count.stdout | regex_search('CHALLENGE_COUNT:(\d+)') | regex_replace('CHALLENGE_COUNT:', ''))
+         if (_all_challenges | length > 0 and _challenge_count is defined and _challenge_count.stdout is defined)
+         else '0' }}
+
+- name: "{{ instructor.name }} — Report CTFd configured"
+  ansible.builtin.debug:
+    msg: >-
+      CTFd for {{ instructor.name }}:
+      {{ _loaded_challenge_count }} challenges at {{ _ctfd_base_url }}.
+      Users: admin ({{ ctfd_admin_username }}), student ({{ student_name }}).
+
+- name: "{{ instructor.name }} — Cleanup temp directory"
+  ansible.builtin.file:
+    path: "{{ _archive_dir.path }}"
+    state: absent

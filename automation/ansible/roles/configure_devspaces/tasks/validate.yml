@@ -1,0 +1,27 @@
+---
+- name: Require access to the leaderboard cluster
+  ansible.builtin.assert:
+    that:
+      - aia_kubeconfig is defined
+
+- name: Read the CI-provisioned Dev Spaces policy
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ aia_kubeconfig }}"
+    api_version: org.eclipse.che/v2
+    kind: CheCluster
+    namespace: "{{ aia_devspaces_namespace }}"
+    name: "{{ aia_devspaces_name }}"
+  register: _aia_devspaces_policy
+
+- name: Require the leaderboard CI to supply concurrent persistent workspaces
+  ansible.builtin.assert:
+    that:
+      - _aia_devspaces_policy.resources | length == 1
+      - (_aia_devspaces_policy.resources[0].spec.devEnvironments.maxNumberOfWorkspacesPerUser | default(0) | int) >= (aia_devspaces_running_workspaces_per_user | int)
+      - (_aia_devspaces_policy.resources[0].spec.devEnvironments.maxNumberOfRunningWorkspacesPerUser | default(0) | int) >= (aia_devspaces_running_workspaces_per_user | int)
+      - (_aia_devspaces_policy.resources[0].spec.devEnvironments.storage.pvcStrategy | default('')) == aia_devspaces_pvc_strategy
+    fail_msg: >-
+      The leaderboard CI must provision two saved and running workspaces per user
+      with per-workspace storage. Check the effective catalog configuration and
+      core_workloads version. For an older deployment, explicitly run
+      configure_devspaces.yml before retrying; post-deploy does not patch Dev Spaces.
