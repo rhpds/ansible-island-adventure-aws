@@ -47,6 +47,15 @@ This is a sanitized source snapshot based on upstream commit
 original Publishing House registration are excluded from publication.
 The original CNV repository and workflow are not modified or re-registered.
 
+## Student CI health check
+
+Run `qa-automation/healthcheck.yml` with private published student fields, or
+select one explicit student hostname from an exported leaderboard inventory.
+Each invocation checks exactly one student and rejects multi-student targets. It validates
+student service logins, repository ownership, AWS SSH identity/sudo and fresh
+AAP/managed-node runtime connectivity without applying configuration. See
+[health-check usage and boundaries](qa-automation/README.md).
+
 ## Validation boundaries
 
 Static/unit checks do not establish cloud readiness. Integration testing must

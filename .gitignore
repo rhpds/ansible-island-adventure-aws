@@ -32,6 +32,7 @@ utils/.student.yaml
 
 # Catalog session, order payloads, and ResourceClaim exports (contain credentials)
 .aia-dev/
+.aia-healthcheck/
 __pycache__/
 .venv/
 

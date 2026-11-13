@@ -1,0 +1,134 @@
+---
+# Check exactly one student. Shared leader services are observed, never configured.
+- name: Require an explicit student target
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Require localhost or one explicit exported student hostname
+      ansible.builtin.assert:
+        that:
+          - aia_healthcheck_hosts | default('localhost') == 'localhost' or aia_healthcheck_hosts in groups.get('aia_students', [])
+        fail_msg: Supply private student vars for localhost, or select exactly one exported student hostname with aia_healthcheck_hosts.
+
+- name: Check one AWS student CI
+  hosts: "{{ aia_healthcheck_hosts | default('localhost') }}"
+  connection: local
+  gather_facts: false
+  vars:
+    aia_healthcheck_report_dir: "{{ playbook_dir }}/../../.aia-healthcheck"
+    # Flat catalog provision fields work directly with -e @/private/student.yml.
+    # The existing multi-student exporter uses aia_student/aia_managed_node instead.
+    health_data:
+      guid: "{{ guid }}"
+      openshift_cluster_ingress_domain: "{{ openshift_cluster_ingress_domain | default(apps_domain) }}"
+      aap_url: "{{ aap_url }}"
+      aap_username: "{{ aap_username | default(aia_student.aap_username) }}"
+      aap_password: "{{ aap_password }}"
+      gitea_url: "{{ gitea_url }}"
+      gitea_username: "{{ gitea_username }}"
+      gitea_password: "{{ gitea_password }}"
+      ctfd_url: "{{ ctfd_url }}"
+      ctfd_student_username: "{{ ctfd_student_username | default(student_name) }}"
+      ctfd_student_password: "{{ ctfd_student_password | default(common_password) }}"
+      ctfd_admin_username: "{{ ctfd_admin_username }}"
+      ctfd_admin_password: "{{ ctfd_admin_password }}"
+      devspaces_url: "{{ devspaces_url }}"
+      keycloak_url: "{{ keycloak_url | default('https://sso.' ~ (openshift_cluster_ingress_domain | default(apps_domain))) }}"
+      keycloak_username: "{{ keycloak_username | default(gitea_username) }}"
+      keycloak_realm: "{{ keycloak_realm | default('sso') }}"
+      bastion_public_hostname: "{{ bastion_public_hostname | default(aia_managed_node.host) }}"
+      bastion_ssh_port: "{{ bastion_ssh_port | default(aia_managed_node.port) }}"
+      bastion_ssh_user_name: "{{ bastion_ssh_user_name | default(aia_managed_node.username) }}"
+      bastion_ssh_password: "{{ bastion_ssh_password | default(aia_managed_node.password) }}"
+  tasks:
+    - name: Refuse multi-student execution before any probes
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+        fail_msg: Health checks must target exactly one student.
+
+    - name: Require a safe student identity for evidence filenames
+      ansible.builtin.assert:
+        that:
+          - guid is match('^[a-z0-9][a-z0-9-]*$')
+        fail_msg: Missing or invalid student GUID.
+
+    - name: Verify student services, accounts, repository ownership and AWS SSH identity
+      aia_student_health:
+        data: "{{ health_data }}"
+        validate_certs: "{{ aia_validate_certs | default(true) }}"
+      register: health_services
+      failed_when: false
+      no_log: true
+
+    - name: Measure fresh control, AAP execution and managed-node connectivity
+      aia_connectivity:
+        url: "{{ health_data.aap_url }}"
+        username: "{{ health_data.aap_username }}"
+        password: "{{ health_data.aap_password }}"
+        guid: "{{ guid }}"
+        node:
+          host: "{{ health_data.bastion_public_hostname }}"
+          port: "{{ health_data.bastion_ssh_port }}"
+          username: "{{ health_data.bastion_ssh_user_name }}"
+          password: "{{ health_data.bastion_ssh_password }}"
+        endpoints:
+          - {name: gitea, url: "{{ health_data.gitea_url }}"}
+          - {name: aap, url: "{{ health_data.aap_url }}"}
+          - {name: ctfd, url: "{{ health_data.ctfd_url }}"}
+          - {name: devspaces, url: "{{ health_data.devspaces_url }}"}
+        managed_web_url: "{{ managed_node_web_url | default(aia_student.managed_node_web_url | default(omit)) }}"
+        validate_certs: "{{ aia_validate_certs | default(true) }}"
+        connect_timeout: "{{ aia_readiness_connect_timeout | default(3) }}"
+        job_timeout: "{{ aia_readiness_job_timeout | default(300) }}"
+      register: health_runtime
+      failed_when: false
+      no_log: true
+
+    - name: Retain safe results even when a probe module fails
+      ansible.builtin.set_fact:
+        health_report:
+          guid: "{{ guid }}"
+          services: "{{ health_services.report | default({'status': 'failed', 'error': 'service probe failed; validate inputs'}) }}"
+          runtime: "{{ health_runtime.report | default({'status': 'failed', 'error': 'runtime probe failed; validate inputs'}) }}"
+      when: not ansible_check_mode
+
+    - name: Create private evidence directory
+      ansible.builtin.file:
+        path: "{{ aia_healthcheck_report_dir }}"
+        state: directory
+        mode: '0700'
+      when: not ansible_check_mode
+
+    - name: Save per-student health evidence without credentials or response bodies
+      ansible.builtin.copy:
+        dest: "{{ aia_healthcheck_report_dir }}/{{ guid }}.{{ health_report.services.id | default(health_report.runtime.id | default('invalid-input')) }}.health.json"
+        content: "{{ health_report | to_nice_json }}\n"
+        mode: '0600'
+      register: health_evidence
+      when: not ansible_check_mode
+
+    - name: Report student result
+      ansible.builtin.debug:
+        msg:
+          student: "{{ guid }}"
+          services: "{{ health_report.services.status }}"
+          runtime: "{{ health_report.runtime.status }}"
+          service_checks: "{{ health_report.services.checks | default({}) }}"
+          runtime_sources: "{{ health_report.runtime.sources | default({}) | dict2items | map(attribute='key') | list }}"
+          evidence: "{{ health_evidence.dest }}"
+      when: not ansible_check_mode
+
+- name: Enforce the selected student's health
+  hosts: "{{ aia_healthcheck_hosts | default('localhost') }}"
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Require service and fresh runtime checks to pass
+      ansible.builtin.assert:
+        that:
+          - health_report.services.status == 'passed'
+          - health_report.runtime.status == 'passed'
+        fail_msg: "Student {{ guid }} failed health checks; see the retained health.json evidence."
+      when: not ansible_check_mode
