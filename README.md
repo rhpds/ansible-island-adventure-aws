@@ -21,6 +21,11 @@ ODF uses gp3-backed storage and supplies CephFS RWX for AAP Hub. Student
 managed nodes use EC2 SSH endpoints and an OpenShift HTTPS route for the
 Apache challenge. See [AWS.md](AWS.md) for architecture and validation limits.
 
+The student catalog integration completes event content, repository access and
+the instructor vault during provisioning, then gates handoff on full student
+health. The leaderboard has its own final storage/service gate. See
+[catalog integration and health-check entry points](AWS.md#provisioning-gates-and-the-images-health-checks).
+
 Showroom content is served from this AWS repository on main, using site.yml
 and the local content/ directory. The original CNV content repository remains
 independent. Inherited utility scripts retain CNV ordering defaults and must
@@ -49,6 +54,11 @@ sets example SSH attributes only for the static preview; RHDP Showroom still
 uses `site.yml` directly and receives the actual deployment's user data.
 
 ## Tests
+
+Local deployment state belongs under the ignored `.aia-dev/` directory.
+The top-level `catalog-info.yaml` is platform metadata and must not be rewritten
+for local tests or committed with deployment-specific changes. Devfile-generated
+assistant permissions use `.aia-dev/local-catalog-info.yaml` for local metadata.
 
 Install Ansible, PyYAML, Jinja2 and the dependencies used by the collection tests,
 then run:

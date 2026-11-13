@@ -1,5 +1,5 @@
 ---
-# Catalog provisioning initializes access only. Content is loaded after deployment.
+# Access bootstrap precedes the optional catalog-integrated content configuration.
 - name: "{{ instructor.name }} — Wait for CTFd service"
   ansible.builtin.include_tasks: ctfd_ready.yml
 
@@ -13,7 +13,7 @@
         URL:          https://island-{{ instructor.ctfd_ns }}.{{ cluster_apps_domain }}
         Admin:        {{ ctfd_admin_username }} / {{ ctfd_admin_password }}
         Student:      {{ student_name }} / {{ common_password }}
-        Challenges:   Load after deployment with configure_ctfd.yml
+        Challenges:   {{ 'Configured by student post-provision' if instructor_config_post_provision | bool else 'Load after deployment with configure_ctfd.yml' }}
     data:
       ctfd_url: "https://island-{{ instructor.ctfd_ns }}.{{ cluster_apps_domain }}"
       ctfd_admin_username: "{{ ctfd_admin_username }}"

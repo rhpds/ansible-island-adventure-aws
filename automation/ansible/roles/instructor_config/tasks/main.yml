@@ -26,6 +26,11 @@
 - name: "{{ instructor.name }} — Bootstrap CTFd access"
   ansible.builtin.include_tasks: ctfd_bootstrap.yml
 
+- name: "{{ instructor.name }} — Complete event content, repositories and lab vault"
+  ansible.builtin.include_role:
+    name: student_post_provision
+  when: instructor_config_post_provision | bool
+
 - name: "{{ instructor.name }} — Validate actual student runtime connectivity"
   ansible.builtin.include_role:
     name: student_readiness

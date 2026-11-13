@@ -1,0 +1,149 @@
+---
+- name: Require this CI's published student identity before any probes
+  ansible.builtin.assert:
+    that:
+      - aia_student_health_data.guid == guid
+      - aia_student_health_data.aap_username == 'instructor-' ~ guid
+      - aia_student_health_data.gitea_username == 'instructor-' ~ guid
+      - aia_student_health_data.keycloak_username == 'instructor-' ~ guid
+      - aia_healthcheck_expected_challenges | int >= 25
+      - aia_healthcheck_require_post_provision | bool
+    fail_msg: Health checks require provisioned data belonging to exactly this student CI.
+  no_log: true
+
+- name: Create the private health evidence directory
+  ansible.builtin.file:
+    path: "{{ aia_healthcheck_report_dir }}"
+    state: directory
+    mode: '0700'
+
+# Deployer pods run on a management cluster, unlike the student Showroom.
+# Explicitly select the leaderboard API and its CA, never kubernetes.default.svc.
+- name: Read the selected leaderboard's API serving CA
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ aia_kubeconfig | default(omit) }}"
+    api_version: v1
+    kind: ConfigMap
+    namespace: openshift-config-managed
+    name: kube-apiserver-server-ca
+  register: _aia_health_ca
+
+- name: Retain the public CA certificate for verified student API login
+  ansible.builtin.copy:
+    content: "{{ _aia_health_ca.resources[0].data['ca-bundle.crt'] }}"
+    dest: "{{ aia_healthcheck_report_dir }}/{{ guid }}.api-ca.crt"
+    mode: '0600'
+
+- name: Check personal logins, deployed event content, lab vault and AWS SSH identity
+  ansible_island_adventure.automation.aia_student_health:
+    data: >-
+      {{ aia_student_health_data | dict2items |
+         selectattr('key', 'in', aia_student_health_field_names) | items2dict | combine({
+        'ocp_api_url': openshift_api_server_url,
+        'ocp_ca_file': aia_healthcheck_report_dir ~ '/' ~ guid ~ '.api-ca.crt',
+        'expected_challenge_count': aia_healthcheck_expected_challenges | int,
+        'require_post_provision': aia_healthcheck_require_post_provision | bool
+      }) }}
+    validate_certs: "{{ aia_validate_certs | default(true) }}"
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  register: _aia_health_services
+  failed_when: false
+  no_log: true
+  when: not ansible_check_mode
+
+- name: Check fresh AAP execution and VM return paths
+  ansible_island_adventure.automation.aia_connectivity:
+    url: "{{ aia_student_health_data.aap_url }}"
+    username: "{{ aia_student_health_data.aap_username }}"
+    password: "{{ aia_student_health_data.aap_password }}"
+    guid: "{{ guid }}"
+    node:
+      host: "{{ aia_student_health_data.bastion_public_hostname }}"
+      port: "{{ aia_student_health_data.bastion_ssh_port | int }}"
+      username: "{{ aia_student_health_data.bastion_ssh_user_name }}"
+      password: "{{ aia_student_health_data.bastion_ssh_password }}"
+    endpoints:
+      - {name: gitea, url: "{{ aia_student_health_data.gitea_url }}"}
+      - {name: aap, url: "{{ aia_student_health_data.aap_url }}"}
+      - {name: ctfd, url: "{{ aia_student_health_data.ctfd_url }}"}
+      - {name: devspaces, url: "{{ aia_student_health_data.devspaces_url }}"}
+    managed_web_url: "{{ aia_student_health_data.managed_node_web_url }}"
+    validate_certs: "{{ aia_validate_certs | default(true) }}"
+    connect_timeout: "{{ aia_readiness_connect_timeout | default(3) }}"
+    job_timeout: "{{ aia_readiness_job_timeout | default(300) }}"
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  register: _aia_health_runtime
+  failed_when: false
+  no_log: true
+  when: not ansible_check_mode
+
+- name: Persist and enforce measured student health
+  when: not ansible_check_mode
+  block:
+    - name: Retain safe evidence even when a probe module fails
+      ansible.builtin.set_fact:
+        aia_health_report:
+          guid: "{{ guid }}"
+          services: "{{ _aia_health_services.report | default({'status': 'failed', 'error': 'service probe failed'}) }}"
+          runtime: "{{ _aia_health_runtime.report | default({'status': 'failed', 'error': 'runtime probe failed'}) }}"
+
+    - name: Save a distinct health report before enforcing the gate
+      ansible.builtin.copy:
+        content: "{{ aia_health_report | to_nice_json }}\n"
+        dest: "{{ aia_healthcheck_report_dir }}/{{ guid }}.{{ aia_health_report.services.id | default(aia_health_report.runtime.id | default('invalid-input')) }}.health.json"
+        mode: '0600'
+      register: _aia_health_file
+
+    - name: Publish the latest health evidence in the personal lab namespace
+      kubernetes.core.k8s:
+        kubeconfig: "{{ aia_kubeconfig | default(omit) }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: aia-health
+            namespace: "instructor-{{ guid }}-lab"
+            labels:
+              island-adventure/instructor: "instructor-{{ guid }}"
+          data:
+            report.json: "{{ aia_health_report | to_json }}"
+
+    - name: Publish measured health in RHDP user data
+      agnosticd.core.agnosticd_user_info:
+        msg: >-
+          Student health: {{ 'passed' if aia_health_report.services.status == 'passed' and
+          aia_health_report.runtime.status == 'passed' else 'failed' }}.
+          Evidence: ConfigMap instructor-{{ guid }}-lab/aia-health.
+        data:
+          aia_health_status: "{{ 'passed' if aia_health_report.services.status == 'passed' and aia_health_report.runtime.status == 'passed' else 'failed' }}"
+          aia_health_namespace: "instructor-{{ guid }}-lab"
+          aia_health_configmap: aia-health
+      when: aia_healthcheck_publish_user_info | bool
+
+    - name: Enforce health and always print the measured summary
+      block:
+        - name: Require full student service and runtime readiness before handoff
+          ansible.builtin.assert:
+            that:
+              - aia_health_report.services.status == 'passed'
+              - aia_health_report.runtime.status == 'passed'
+            fail_msg: "Student {{ guid }} is not ready; inspect {{ _aia_health_file.dest }} and its aia-health ConfigMap."
+      always:
+        - name: Student health check summary
+          ansible.builtin.debug:
+            msg:
+              student: "{{ guid }}"
+              service_checks: "{{ aia_health_report.services.checks | default({}) }}"
+              control: "{{ aia_health_report.runtime.sources.control.status | default('failed') }}"
+              aap: "{{ aia_health_report.runtime.sources.aap.status | default('failed') }}"
+              aap_ssh: "{{ aia_health_report.runtime.sources.aap_ssh.status | default('failed') }}"
+              managed_node: "{{ aia_health_report.runtime.sources.managed_node.status | default('failed') }}"
+              evidence: "{{ _aia_health_file.dest }}"
+
+- name: State that check mode does not establish student health
+  ansible.builtin.debug:
+    msg: "Student health: SKIPPED (check mode); no probes were run."
+  when: ansible_check_mode

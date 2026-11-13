@@ -94,6 +94,7 @@ redis_pvc_size: 1Gi
 # -------------------------------------------------------------------
 instructor_config_deploy_verifier: false
 instructor_config_validate_connectivity: false
+instructor_config_post_provision: false
 verifier_image: "quay.io/rhpds/ansible-island-verifier:latest"
 verifier_hmac_secret: ""
 

@@ -1,0 +1,80 @@
+---
+- name: Read core leaderboard readiness objects without changing applications
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ aia_kubeconfig | default(omit) }}"
+    api_version: "{{ item.api_version }}"
+    kind: "{{ item.kind }}"
+    namespace: "{{ item.namespace | default(omit) }}"
+  loop:
+    - {key: nodes, api_version: v1, kind: Node}
+    - {key: storageclasses, api_version: storage.k8s.io/v1, kind: StorageClass}
+    - {key: storageclusters, api_version: ocs.openshift.io/v1, kind: StorageCluster, namespace: openshift-storage}
+    - {key: cephclusters, api_version: ceph.rook.io/v1, kind: CephCluster, namespace: openshift-storage}
+    - {key: aap_pvcs, api_version: v1, kind: PersistentVolumeClaim, namespace: aap}
+    - {key: aap, api_version: aap.ansible.com/v1alpha1, kind: AnsibleAutomationPlatform, namespace: aap}
+    - {key: devspaces, api_version: org.eclipse.che/v2, kind: CheCluster, namespace: openshift-devspaces}
+    - {key: aap_deployments, api_version: apps/v1, kind: Deployment, namespace: aap}
+    - {key: aap_statefulsets, api_version: apps/v1, kind: StatefulSet, namespace: aap}
+    - {key: gitea_deployments, api_version: apps/v1, kind: Deployment, namespace: gitea}
+    - {key: gitea_statefulsets, api_version: apps/v1, kind: StatefulSet, namespace: gitea}
+    - {key: keycloak_deployments, api_version: apps/v1, kind: Deployment, namespace: keycloak}
+    - {key: keycloak_statefulsets, api_version: apps/v1, kind: StatefulSet, namespace: keycloak}
+    - {key: openshift-devspaces_deployments, api_version: apps/v1, kind: Deployment, namespace: openshift-devspaces}
+    - {key: openshift-devspaces_statefulsets, api_version: apps/v1, kind: StatefulSet, namespace: openshift-devspaces}
+    - {key: openshift-storage_deployments, api_version: apps/v1, kind: Deployment, namespace: openshift-storage}
+    - {key: openshift-storage_statefulsets, api_version: apps/v1, kind: StatefulSet, namespace: openshift-storage}
+  register: _aia_leaderboard_snapshots
+  failed_when: false
+  no_log: true
+  when: not ansible_check_mode
+
+- name: Evaluate required leaderboard storage, workloads and HTTPS services
+  ansible_island_adventure.automation.aia_leaderboard_health:
+    snapshots: "{{ _aia_leaderboard_snapshots.results }}"
+    domain: "{{ openshift_cluster_ingress_domain }}"
+    minimum_workers: "{{ aia_leaderboard_minimum_workers }}"
+    rwx_class: "{{ aia_leaderboard_rwx_class }}"
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  register: _aia_leaderboard_health
+  no_log: true
+  when: not ansible_check_mode
+
+- name: Persist and enforce leaderboard health before handoff
+  when: not ansible_check_mode
+  block:
+    - name: Create the private leaderboard evidence directory
+      ansible.builtin.file:
+        path: "{{ aia_leaderboard_health_report_dir }}"
+        state: directory
+        mode: '0700'
+
+    - name: Save a distinct leaderboard readiness sample
+      ansible.builtin.copy:
+        content: "{{ _aia_leaderboard_health.report | to_nice_json }}\n"
+        dest: "{{ aia_leaderboard_health_report_dir }}/leaderboard.{{ _aia_leaderboard_health.report.id }}.health.json"
+        mode: '0600'
+      register: _aia_leaderboard_health_file
+
+    - name: Publish leaderboard health in RHDP user data
+      agnosticd.core.agnosticd_user_info:
+        msg: "Leaderboard health: {{ _aia_leaderboard_health.report.status }}. Evidence retained in the deployment output archive."
+        data:
+          aia_leaderboard_health_status: "{{ _aia_leaderboard_health.report.status }}"
+          aia_leaderboard_health_id: "{{ _aia_leaderboard_health.report.id }}"
+      when: aia_healthcheck_publish_user_info | bool
+
+    - name: Require measured leaderboard readiness
+      block:
+        - ansible.builtin.assert:
+            that: _aia_leaderboard_health.report.status == 'passed'
+            fail_msg: "Leaderboard is not ready; inspect {{ _aia_leaderboard_health_file.dest }}."
+      always:
+        - name: Leaderboard health check summary
+          ansible.builtin.debug:
+            msg: "{{ _aia_leaderboard_health.report }}"
+
+- name: State that check mode does not establish leaderboard health
+  ansible.builtin.debug:
+    msg: "Leaderboard health: SKIPPED (check mode); no probes were run."
+  when: ansible_check_mode

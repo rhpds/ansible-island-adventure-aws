@@ -1,5 +1,6 @@
 """Student health checks: isolated logins, sanitized failures and all-student gating."""
 import importlib.util
+import base64
 import json
 import os
 from pathlib import Path
@@ -8,6 +9,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
+from ansible.parsing.vault import VaultLib, VaultSecret
 
 ROOT = Path(__file__).resolve().parents[3]
 COLLECTION = ROOT / 'automation/ansible'
@@ -31,6 +33,52 @@ def fields(guid='one'):
 
 
 class ServiceTests(unittest.TestCase):
+    def test_empty_content_fails_the_post_provision_gate(self):
+        responses = [MagicMock(text='<input name="nonce" value="abc">'), MagicMock(status_code=302),
+                     MagicMock(status_code=200), MagicMock(json=lambda: {'success': True, 'data': []})]
+        with patch.object(health, 'request', side_effect=responses) as request:
+            with self.assertRaisesRegex(health.HealthError, 'content is incomplete'):
+                health.ctfd_login('https://ctfd.example.test', 'admin', 'synthetic', True, True, 25)
+        self.assertTrue(request.call_args.args[2].endswith('?view=admin'))
+
+    def test_placeholder_flags_fail_even_with_enough_challenges(self):
+        responses = [MagicMock(text='<input name="nonce" value="abc">'), MagicMock(status_code=302),
+                     MagicMock(status_code=200), MagicMock(json=lambda: {'success': True, 'data': [{'id': 1}]}),
+                     MagicMock(json=lambda: {'success': True, 'data': [{'content': 'CHANGEME'}]})]
+        with patch.object(health, 'request', side_effect=responses):
+            with self.assertRaisesRegex(health.HealthError, 'placeholders'):
+                health.ctfd_login('https://ctfd.example.test', 'admin', 'synthetic', True, True, 1)
+
+    def test_valid_real_answers_pass_content_gate(self):
+        responses = [MagicMock(text='<input name="nonce" value="abc">'), MagicMock(status_code=302),
+                     MagicMock(status_code=200), MagicMock(json=lambda: {'success': True, 'data': [{'id': 1}]}),
+                     MagicMock(json=lambda: {'success': True, 'data': [{'content': 'synthetic-event-answer'}]})]
+        with patch.object(health, 'request', side_effect=responses):
+            health.ctfd_login('https://ctfd.example.test', 'admin', 'synthetic', True, True, 1)
+
+    def test_post_provision_requires_personal_guide_and_rekeyed_vault(self):
+        data = fields(); data['require_post_provision'] = True
+        encrypted = VaultLib([('default', VaultSecret(data['gitea_password'].encode()))]).encrypt(b'ctfd_flags: {answer: synthetic-answer}')
+        guide = data['ctfd_url'] + '\n' + data['gitea_url'] + '/instructor-one/ansible-survival-kit'
+        def response(session, method, url, **kwargs):
+            if url.endswith('/api/v1/user'): payload = {'login': data['gitea_username']}
+            elif 'ISLAND_ACCESS.md' in url: payload = {'content': base64.b64encode(guide.encode()).decode()}
+            elif 'flags.yml' in url: payload = {'content': base64.b64encode(encrypted).decode()}
+            elif '/api/v1/repos/' in url: payload = {'owner': {'login': data['gitea_username']}}
+            elif url.endswith('/.well-known/openid-configuration'): payload = {'issuer': data['keycloak_url'] + '/realms/sso'}
+            else: payload = {}
+            return MagicMock(json=lambda: payload)
+        with patch.object(health, 'request', side_effect=response), patch.object(health, 'openshift_login'), \
+             patch.object(health, 'ctfd_login'), patch('paramiko.SSHClient'):
+            self.assertEqual(health.measure(data)['checks']['gitea_login_and_repositories']['status'], 'passed')
+            guide = 'another student guide'
+            self.assertEqual(health.measure(data)['checks']['gitea_login_and_repositories']['status'], 'failed')
+            guide = data['ctfd_url'] + '\n' + data['gitea_url'] + '/instructor-one/ansible-survival-kit'
+            data['lab_password'] = 'wrong-lab-password'
+            result = health.measure(data)
+            self.assertEqual(result['checks']['gitea_login_and_repositories']['status'], 'failed')
+            self.assertNotIn('synthetic-answer', json.dumps(result))
+
     def test_showroom_bundle_matches_collection_sources(self):
         self.assertEqual((ROOT / 'qa-automation/student_healthcheck.yml').read_bytes(),
                          (COLLECTION / 'healthcheck.yml').read_bytes())

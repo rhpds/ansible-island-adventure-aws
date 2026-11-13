@@ -1,0 +1,37 @@
+---
+aia_student_health_data: "{{ lookup('agnosticd.core.agnosticd_user_data', '*') }}"
+aia_healthcheck_expected_challenges: 25
+aia_healthcheck_require_post_provision: true
+aia_healthcheck_report_dir: "{{ output_dir | default('/tmp') }}/aia-healthcheck"
+aia_healthcheck_publish_user_info: true
+aia_student_health_field_names:
+  - guid
+  - apps_domain
+  - openshift_cluster_ingress_domain
+  - aap_url
+  - aap_username
+  - aap_password
+  - gitea_url
+  - gitea_username
+  - gitea_password
+  - ctfd_url
+  - ctfd_student_username
+  - ctfd_student_password
+  - ctfd_admin_username
+  - ctfd_admin_password
+  - devspaces_url
+  - keycloak_url
+  - keycloak_username
+  - keycloak_password
+  - keycloak_realm
+  - ocp_username
+  - ocp_password
+  - ocp_api_url
+  - ocp_ca_file
+  - lab_password
+  - bastion_public_hostname
+  - bastion_ssh_port
+  - bastion_ssh_user_name
+  - bastion_ssh_password
+  - expected_challenge_count
+  - require_post_provision

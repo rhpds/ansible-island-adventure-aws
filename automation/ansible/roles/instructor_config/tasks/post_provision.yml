@@ -1,0 +1,6 @@
+---
+# Explicit repair entry point: finish an existing student without re-running
+# namespace, deployment, SSO or shared-service bootstrap.
+- name: Complete this existing student's event configuration
+  ansible.builtin.include_role:
+    name: student_post_provision

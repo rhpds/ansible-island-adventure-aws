@@ -101,9 +101,14 @@ targets fail rather than establish health.
   For a private API CA, supply `aia_healthcheck_ocp_ca_file`; TLS verification
   remains enabled by default.
 - Gitea authenticated username and ownership/access to `ansible-survival-kit`
-  and `aia-instructor` repositories.
+  and `aia-instructor` repositories, the personal `ISLAND_ACCESS.md`, and proof
+  that the instructor vault decrypts with the provisioned lab password. Vault
+  verification runs in the same Ansible runner interpreter; the key and encrypted
+  content travel through stdin, without temporary key files or plaintext output.
 - Separate CTFd student/admin logins and authenticated challenge API. Empty
-  challenge content is valid before the separate event-content load.
+  challenge content fails the default full-readiness profile. The admin API must
+  expose at least 25 challenges with nonempty, non-placeholder answers. Additional
+  instructor-created challenges are allowed; the check never rewrites content.
 - Dev Spaces route and Keycloak realm discovery. These are **not** proof of a
   browser SSO login or of starting two persistent workspaces. Direct-password
   OAuth grants are deliberately not required.
@@ -135,6 +140,13 @@ Override `aia_healthcheck_report_dir`, `aia_readiness_connect_timeout` (default
 3 seconds per address) or `aia_readiness_job_timeout` (default 300 seconds per
 AAP job) as needed. TLS verification defaults to enabled. `--check` skips actual
 probes and therefore does **not** establish health.
+
+The full profile requires at least 25 challenges and completed repository/vault
+configuration. For bootstrap diagnosis only, an organizer can explicitly set
+`aia_healthcheck_expected_challenges: 0` and
+`aia_healthcheck_require_post_provision: false`. The report records these reduced
+requirements; such a diagnostic pass does not establish complete student
+readiness. The native `student_health` catalog gate rejects a reduced profile.
 
 This does not certify leader ODF/CephFS health, cross-node RWX, workspace launch,
 Showroom, teardown, or the full learner workflow. Those require separate leader

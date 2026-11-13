@@ -49,6 +49,62 @@ The original CNV repository and workflow are not modified or re-registered.
 
 ## Student CI health check
 
+The corresponding AWS catalog update enables `instructor_config_post_provision`. After initial
+account/service bootstrap, `student_post_provision` prepares the personal AAP
+inventory and Machine credential, verifies repository branches, re-keys the
+instructor vault, writes `ISLAND_ACCESS.md`, loads the 25 real event challenges
+and synchronizes their answers without replacing existing challenge IDs or solves.
+This is part of the student CI; a manual `post_deploy.yml` run is maintenance,
+not a required step for a newly provisioned student.
+
+The organizer key comes from the job's existing Ansible Vault credentials. It is
+the key that unlocks the packaged encrypted event answers, not the generated
+student password. Local runs can use `--vault-password-file /private/organizer-key`.
+The role tests the configured credentials before repository/content changes and
+fails if none match. It never publishes the organizer key in user data. The
+student's instructor vault is encrypted with their provisioned lab password.
+RHDP must attach the matching existing Vault credential; a local `.vault-password`
+file is not copied into the catalog or the execution environment.
+Babylon's runner forwards `governor.spec.vars.vault_credentials` to the Tower
+job's Vault credentials in
+[`resolveVaultCredentials`](https://github.com/rhpds/babylon-runner/blob/4b9e815e7ed0a3f51e278859b0a86b157987f95d/internal/handler/tower_launch.go#L445).
+
+### Provisioning gates and the image's health checks
+
+The checks shown in `health_checks.png` are defined in
+`automation/ansible/healthcheck.yml`,
+`automation/ansible/plugins/modules/aia_student_health.py` and
+`automation/ansible/plugins/modules/aia_connectivity.py`. Their self-contained Showroom copies live
+under `qa-automation/`; tests require the copies to match.
+
+RHDP's Babylon runner marks an item `healthy` when its deployer job succeeds;
+that flag is not evidence that these application checks ran. The inspected
+AgnosticD v2 path has no generic `health_checks` stage or matching configuration
+key. The supported integration points are:
+
+- Student (`cloud-vms-base`): `post_software_final_workloads.localhost` runs
+  `ansible_island_adventure.automation.student_health` after post-software
+  workloads, Showroom and user-data export. Its native implementation is
+  `rhpds/agnosticd-v2:ansible/configs/cloud-vms-base/post_software.yml`.
+- Leaderboard (`openshift-workloads`): the final `workloads` entry runs
+  `ansible_island_adventure.automation.leaderboard_health` through
+  `ansible/roles/openshift_workload_deployer/tasks/run_workload_on_clusters.yml`.
+  This config's `post_software.yml` does not run the cloud-vms final-workload list.
+
+Both gates retain reports in the deployment output before failing. The student
+gate also publishes ConfigMap `instructor-<guid>-lab/aia-health`; its latest status
+is included in RHDP user data. Missing challenges or a vault that the student
+cannot unlock fail the full gate even if all network paths work. The gate selects
+the leaderboard API and its serving CA explicitly, because the deployer may run
+on a different management cluster than the student's Showroom.
+
+The leaderboard gate checks three Ready workers, Available ODF / Ceph HEALTH_OK,
+CephFS storage, bound AAP claims including RWX, successful AAP reconciliation,
+ready shared deployments/statefulsets, Dev Spaces' two concurrent persistent
+workspaces, and shared HTTPS endpoints. Declared/bound RWX storage is not a
+cross-node read/write test, and route availability is not a browser/workspace
+launch test. Preserve the separate end-to-end acceptance checks below.
+
 Run `qa-automation/healthcheck.yml` with private published student fields, or
 select one explicit student hostname from an exported leaderboard inventory.
 Each invocation checks exactly one student and rejects multi-student targets. It validates

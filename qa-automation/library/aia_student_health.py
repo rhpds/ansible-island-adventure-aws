@@ -1,18 +1,53 @@
 #!/usr/bin/python
 """Read-only service/login checks for one deployed AWS student CI."""
 import datetime
+import base64
+import json
 from html.parser import HTMLParser
 from pathlib import Path
 import re
+import subprocess
+import sys
 import uuid
 from urllib.parse import parse_qs, urljoin, urlsplit
 
 from ansible.module_utils.basic import AnsibleModule
 import requests
+import yaml
 
 
 class HealthError(Exception):
     pass
+
+
+HEALTH_DATA_FIELDS = (
+    'guid', 'apps_domain', 'openshift_cluster_ingress_domain',
+    'aap_url', 'aap_username', 'aap_password', 'gitea_url', 'gitea_username', 'gitea_password',
+    'ctfd_url', 'ctfd_student_username', 'ctfd_student_password', 'ctfd_admin_username', 'ctfd_admin_password',
+    'devspaces_url', 'keycloak_url', 'keycloak_username', 'keycloak_password', 'keycloak_realm',
+    'ocp_username', 'ocp_password', 'ocp_api_url', 'ocp_ca_file', 'lab_password',
+    'bastion_public_hostname', 'bastion_ssh_port', 'bastion_ssh_user_name', 'bastion_ssh_password',
+    'expected_challenge_count', 'require_post_provision',
+)
+
+
+def verify_lab_vault(ciphertext, password):
+    # AnsiballZ supplies a restricted ansible package in its ZIP. Start the same
+    # runner interpreter afresh to use its installed Vault library. Ciphertext
+    # and key travel through stdin, never command arguments or temporary files;
+    # the child emits no plaintext, and its stderr is not returned to the caller.
+    validator = '''import base64,json,sys,yaml
+from ansible.parsing.vault import VaultLib,VaultSecret
+d=json.load(sys.stdin)
+p=VaultLib([('default',VaultSecret(d['password'].encode()))]).decrypt(base64.b64decode(d['ciphertext']))
+flags=yaml.safe_load(p).get('ctfd_flags')
+sys.exit(0 if isinstance(flags,dict) and flags else 1)
+'''
+    result = subprocess.run([sys.executable, '-c', validator],
+                            input=json.dumps({'ciphertext': ciphertext, 'password': password}),
+                            capture_output=True, text=True, timeout=20)
+    if result.returncode:
+        raise HealthError('Instructor vault does not unlock with the provisioned lab password')
 
 
 class NonceParser(HTMLParser):
@@ -41,7 +76,7 @@ def request(session, method, url, codes=(200,), **kwargs):
     return response
 
 
-def ctfd_login(url, username, password, admin, verify):
+def ctfd_login(url, username, password, admin, verify, minimum_challenges=0):
     # Independent cookie jars: an admin session must never mask a bad student login.
     with requests.Session() as session:
         session.verify = verify
@@ -71,10 +106,19 @@ def ctfd_login(url, username, password, admin, verify):
                 raise HealthError('CTFd admin dashboard redirect limit exceeded')
         else:
             request(session, 'GET', url + '/settings')
-        result = request(session, 'GET', url + '/api/v1/challenges').json()
+        result = request(session, 'GET', url + '/api/v1/challenges' +
+                         ('?view=admin' if admin and minimum_challenges else '')).json()
         if result.get('success') is not True or not isinstance(result.get('data'), list):
             raise HealthError('CTFd authenticated challenge API failed')
-        # Zero challenges is valid before the separate event-content load.
+        if admin and minimum_challenges:
+            if len(result['data']) < minimum_challenges:
+                raise HealthError('Event challenge content is incomplete')
+            for challenge in result['data']:
+                flags = request(session, 'GET', url + '/api/v1/challenges/' + str(challenge['id']) + '/flags').json()
+                if (flags.get('success') is not True or not isinstance(flags.get('data'), list)
+                        or not flags['data'] or any(not isinstance(f.get('content'), str)
+                        or not f['content'].strip() or f['content'] == 'CHANGEME' for f in flags['data'])):
+                    raise HealthError('Challenge answers are missing or contain placeholders')
 
 
 def openshift_login(domain, username, password, verify=True, api_url=None, ca_file=None):
@@ -123,7 +167,7 @@ def measure(data, verify=True):
     domain = data.get('openshift_cluster_ingress_domain') or data.get('apps_domain')
     if not isinstance(domain, str) or not re.fullmatch(r'[A-Za-z0-9.-]+', domain):
         raise HealthError('Missing or invalid leaderboard ingress domain')
-    if data.get('ocp_username', data.get('keycloak_username')) != expected:
+    if (data.get('ocp_username') or data.get('keycloak_username')) != expected:
         raise HealthError('OpenShift login must use this student identity')
     for key in ('aap_username', 'gitea_username', 'keycloak_username'):
         if data.get(key) != expected:
@@ -136,7 +180,9 @@ def measure(data, verify=True):
     if urls['ctfd_url'] != 'https://island-' + expected + '-ctfd.' + domain:
         raise HealthError('CTFd endpoint does not match this student GUID')
     report = dict(id=uuid.uuid4().hex, guid=guid, instructor=expected,
-                  started=datetime.datetime.now(datetime.timezone.utc).isoformat(), checks={})
+                  started=datetime.datetime.now(datetime.timezone.utc).isoformat(), checks={},
+                  requirements={'minimum_challenges': int(data.get('expected_challenge_count', 0)),
+                                'post_provision': bool(data.get('require_post_provision', False))})
 
     def check(name, action):
         try:
@@ -158,6 +204,15 @@ def measure(data, verify=True):
                 repo = request(session, 'GET', urls['gitea_url'] + '/api/v1/repos/' + expected + '/' + repository).json()
                 if repo.get('owner', {}).get('login') != expected:
                     raise HealthError('Repository owner mismatch')
+            if data.get('require_post_provision', False):
+                base = urls['gitea_url'] + '/api/v1/repos/' + expected + '/aia-instructor/contents/'
+                guide = request(session, 'GET', base + 'ISLAND_ACCESS.md?ref=main').json()
+                guide_text = base64.b64decode(guide['content'], validate=False).decode()
+                if (urls['ctfd_url'] not in guide_text or
+                        urls['gitea_url'] + '/' + expected + '/ansible-survival-kit' not in guide_text):
+                    raise HealthError('Personal access guide is missing or belongs to another student')
+                encrypted = request(session, 'GET', base + 'roles/ctfd/vars/flags.yml?ref=main').json()
+                verify_lab_vault(encrypted['content'], data.get('lab_password') or data['gitea_password'])
 
     def public(url):
         with requests.Session() as session:
@@ -193,14 +248,15 @@ def measure(data, verify=True):
             client.close()
 
     check('ocp_student_login', lambda: openshift_login(
-        domain, expected, data.get('ocp_password', data.get('keycloak_password', data.get('gitea_password'))),
+        domain, expected, data.get('ocp_password') or data.get('keycloak_password') or data.get('gitea_password'),
         verify, data.get('ocp_api_url') or None, data.get('ocp_ca_file') or None))
     check('ssh_identity_and_sudo', ssh_identity)
     check('gitea_login_and_repositories', gitea)
     check('ctfd_student_login', lambda: ctfd_login(urls['ctfd_url'], data['ctfd_student_username'],
                                                  data['ctfd_student_password'], False, verify))
     check('ctfd_admin_login', lambda: ctfd_login(urls['ctfd_url'], data['ctfd_admin_username'],
-                                               data['ctfd_admin_password'], True, verify))
+                                               data['ctfd_admin_password'], True, verify,
+                                               int(data.get('expected_challenge_count', 0))))
     check('devspaces_route', lambda: public(urls['devspaces_url']))
     check('keycloak_realm', keycloak)
     report['status'] = 'passed' if all(c['status'] == 'passed' for c in report['checks'].values()) else 'failed'
@@ -209,8 +265,12 @@ def measure(data, verify=True):
 
 
 def main():
+    options = {key: dict(type='str', no_log='password' in key) for key in HEALTH_DATA_FIELDS}
+    options['bastion_ssh_port'] = dict(type='int')
+    options['expected_challenge_count'] = dict(type='int', default=0)
+    options['require_post_provision'] = dict(type='bool', default=False)
     module = AnsibleModule(argument_spec=dict(
-        data=dict(type='dict', required=True, no_log=True),
+        data=dict(type='dict', required=True, options=options),
         validate_certs=dict(type='bool', default=True)), supports_check_mode=True)
     if module.check_mode:
         module.exit_json(changed=False, skipped=True)

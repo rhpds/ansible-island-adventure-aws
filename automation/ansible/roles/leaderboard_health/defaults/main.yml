@@ -1,0 +1,5 @@
+---
+aia_leaderboard_minimum_workers: 3
+aia_leaderboard_rwx_class: ocs-storagecluster-cephfs
+aia_leaderboard_health_report_dir: "{{ output_dir | default('/tmp') }}/aia-healthcheck"
+aia_healthcheck_publish_user_info: true

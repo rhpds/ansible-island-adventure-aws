@@ -1,0 +1,36 @@
+---
+- name: Start with this student's resolved answers and an empty challenge list
+  ansible.builtin.set_fact:
+    ctfd_flags: "{{ _aia_event_bundle.ctfd_flags }}"
+    aia_event_challenges: []
+  no_log: true
+
+- name: Load the packaged authoritative challenge definitions
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/vars/challenges.yml"
+    name: _aia_event_definitions
+  no_log: true
+
+- name: Resolve event challenges and personal repository links
+  ansible.builtin.set_fact:
+    aia_event_challenges: >-
+      {{ (aia_event_challenges | default([])) + [item | combine({
+        'description': item.description ~ (
+          '\n\nYour repository: [' ~ instructor.name ~ '/ansible-survival-kit](' ~
+          gitea_url ~ '/' ~ instructor.name ~ '/ansible-survival-kit).'
+          if item.category in ['At the Beach', 'Treasure Hunt'] else '')
+      })] }}
+  loop: >-
+    {{ _aia_event_definitions.ctfd_challenges +
+       (_aia_event_definitions.ctfd_challenges_advanced if aia_enable_advanced | bool else []) }}
+  no_log: true
+
+- name: Reject missing or placeholder answers before changing repositories or content
+  ansible.builtin.assert:
+    that:
+      - item.content is string
+      - item.content | trim | length > 0
+      - item.content != 'CHANGEME'
+      - "('{' ~ '{') not in item.content"
+  loop: "{{ aia_event_challenges | map(attribute='flags') | flatten }}"
+  no_log: true

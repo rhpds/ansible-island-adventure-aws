@@ -12,8 +12,11 @@
 - name: Re-key instructor answers in memory with the provisioned lab password
   ansible.builtin.set_fact:
     _aia_rekeyed_vault: >-
-      {{ (_aia_instructor_vault.json.content | b64decode) |
-         aia_rekey_vault(aia_instructor_vault_source_password, aia_lab_password) }}
+      {{ [(_aia_instructor_vault.json.content | b64decode)] |
+         map(('ansible_island_adventure.automation.aia_rekey_vault'
+              if ansible_collection_name | default('') == 'ansible_island_adventure.automation'
+              else 'aia_rekey_vault'),
+             aia_instructor_vault_source_password, aia_lab_password) | first }}
   no_log: true
 
 - name: Save only the re-keyed ciphertext without replacing student edits

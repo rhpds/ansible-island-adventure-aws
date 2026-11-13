@@ -9,6 +9,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -308,6 +309,66 @@ module.exit_json(changed=False)
         self.assertEqual(rc, 0, output)
         self.assertEqual(self.k8s_reads.read_text(), "read\n", output)
         self.assertEqual(self.requests, [])
+
+    def test_installed_catalog_role_completes_each_student_and_preserves_reruns(self):
+        # Build/install the real collection. Only the remote AAP and CTFd import
+        # boundaries are stubbed; Gitea calls, vault plugins and orchestration run.
+        build = self.root / 'build'; build.mkdir()
+        env = dict(os.environ, ANSIBLE_CONFIG=str(self.config))
+        for command in [
+            ['ansible-galaxy', 'collection', 'build', str(COLLECTION), '--output-path', str(build)],
+            ['ansible-galaxy', 'collection', 'install', str(build / 'ansible_island_adventure-automation-1.0.0.tar.gz'), '-p', str(self.root / 'collections')],
+        ]:
+            r = subprocess.run(command, env=env, capture_output=True, text=True, timeout=60)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        installed = self.root / 'collections/ansible_collections/ansible_island_adventure/automation'
+        user_info = self.root / 'collections/ansible_collections/agnosticd/core/plugins/modules/agnosticd_user_info.py'
+        user_info.parent.mkdir(parents=True)
+        user_info.write_text('from ansible.module_utils.basic import AnsibleModule\n'
+                             'm=AnsibleModule(argument_spec={"msg":{"type":"str"},"data":{"type":"dict"}})\n'
+                             'm.exit_json(changed=False)\n')
+        for name in ['aia_aap_student.py', 'aia_ctfd_flags.py']:
+            shutil.copy(self.collection / 'library' / name, installed / 'plugins/modules' / name)
+        shutil.copy(self.collection / 'roles/instructor_config/tasks/ctfd_config.yml',
+                    installed / 'roles/instructor_config/tasks/ctfd_config.yml')
+        (installed / 'roles/student_post_provision/files/flags.vault').write_bytes(
+            VaultLib([('default', VaultSecret(self.source_password.encode()))]).encrypt(self.flags.read_bytes()))
+        data = json.loads(self.inventory.read_text())
+        for user, host in data['all']['children']['aia_students']['hosts'].items():
+            guid = host['guid']
+            host.update(ansible_python_interpreter=sys.executable,
+                        aia_aws_managed_node_host='ssh.example.test', aia_aws_managed_node_port=22,
+                        aia_aws_managed_node_web_url='https://treasure-' + guid + '.apps.example.test',
+                        openshift_cluster_ingress_domain='apps.example.test',
+                        output_dir=str(self.root / ('output-' + guid)),
+                        instructor={'name': user, 'password': self.users[user],
+                                    'ctfd_ns': user + '-ctfd', 'lab_ns': user + '-lab'})
+        self.inventory.write_text(json.dumps(data))
+        play = self.root / 'catalog.yml'
+        play.write_text(yaml.safe_dump([{
+            'hosts': 'aia_students', 'connection': 'local', 'gather_facts': False,
+            'tasks': [
+                {'ansible.builtin.include_role': {'name': 'ansible_island_adventure.automation.instructor_config', 'tasks_from': 'post_provision'}},
+                {'ansible.builtin.assert': {'that': ['_aia_event_bundle | length == 0', 'ctfd_flags | length == 0',
+                                                   'aia_event_challenges | length == 0', '_all_challenges | length == 0']}},
+            ],
+        }], sort_keys=False))
+        key = self.root / 'organizer-key'; key.write_text(self.source_password)
+        env.update(ANSIBLE_COLLECTIONS_PATH=str(self.root / 'collections'), ANSIBLE_VAULT_PASSWORD_FILE=str(key))
+        command = ['ansible-playbook', '-i', str(self.inventory), str(play)]
+        result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=90)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(len(self.guides), 2)
+        self.assertNotIn(self.source_password, result.stdout + result.stderr)
+        writes = list(self.writes); vaults = dict(self.student_vaults)
+        result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=90)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.writes, writes); self.assertEqual(self.student_vaults, vaults)
+        # A bad credential cannot mutate even an already-configured repository.
+        key.write_text('wrong-organizer-key'); before = list(self.requests)
+        result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=90)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.requests, before)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,88 @@
+---
+# Called inside instructor_config, after accounts exist and before Showroom reads
+# the published access data. No challenge/score reset is performed on reruns.
+- name: Unlock and validate event answers before configuring the student
+  ansible.builtin.set_fact:
+    _aia_event_bundle: >-
+      {{ lookup('ansible_island_adventure.automation.vault_flags',
+                role_path ~ '/files/flags.vault',
+                include_source_password=true) }}
+  no_log: true
+
+- name: Complete the provisioned AWS student's environment
+  vars:
+    aia_instructor_vault_source_password: "{{ _aia_event_bundle.source_password }}"
+    gitea_username: "{{ instructor.name }}"
+    gitea_password: "{{ instructor.password }}"
+    aap_password: "{{ instructor.password }}"
+    aia_managed_node:
+      host: "{{ aia_aws_managed_node_host }}"
+      port: "{{ aia_aws_managed_node_port | default(22) | int }}"
+      username: "{{ control_user_name | default(student_name) }}"
+      password: "{{ control_user_password | default(common_password) }}"
+    aia_student:
+      guid: "{{ guid }}"
+      aap_url: "{{ aap_url }}"
+      aap_username: "{{ instructor.name }}"
+      ctfd_url: "https://island-{{ instructor.ctfd_ns }}.{{ openshift_cluster_ingress_domain }}"
+      ctfd_username: "{{ student_name }}"
+      managed_node: rhel
+      gitea_url: "{{ gitea_url }}"
+      devspaces_url: "https://devspaces.{{ openshift_cluster_ingress_domain }}"
+      managed_node_web_url: "{{ aia_aws_managed_node_web_url }}"
+  block:
+    - name: Resolve and validate packaged event content
+      ansible.builtin.include_tasks: prepare_event.yml
+
+    - name: Configure the personal AAP inventory and Machine credential
+      ansible.builtin.include_role:
+        name: configure_student_aap
+
+    - name: Configure repositories, personal vault and generated access guide
+      ansible.builtin.include_role:
+        name: configure_student
+
+    - name: Load initial event content without replacing existing challenges or scores
+      ansible.builtin.include_role:
+        name: instructor_config
+        tasks_from: ctfd_config
+        apply:
+          no_log: true
+      vars:
+        ctfd_challenges: "{{ aia_event_challenges }}"
+        ctfd_challenges_advanced: []
+
+    - name: Synchronize real answers in place while preserving challenge IDs and progress
+      ansible_island_adventure.automation.aia_ctfd_flags:
+        url: "{{ aia_student.ctfd_url }}"
+        username: "{{ ctfd_admin_username }}"
+        password: "{{ ctfd_admin_password }}"
+        challenges: "{{ aia_event_challenges }}"
+        validate_certs: "{{ aia_validate_certs | default(true) }}"
+      no_log: true
+
+    - name: Publish completed student content without exposing organizer answers or key
+      agnosticd.core.agnosticd_user_info:
+        msg: "Student environment configured: {{ aia_event_challenges | length }} challenges; lab vault uses the provisioned lab password."
+        data:
+          aia_post_provision_status: complete
+          aia_event_challenge_count: "{{ aia_event_challenges | length }}"
+          aia_access_guide_url: "{{ gitea_url }}/{{ instructor.name }}/aia-instructor/src/branch/main/ISLAND_ACCESS.md"
+
+  always:
+    - name: Remove any remaining private event import files after a failed import
+      ansible.builtin.file:
+        path: "{{ _archive_dir.path }}"
+        state: absent
+      when:
+        - _archive_dir.path is defined
+        - (_archive_dir.path | basename) is match('^ctfd-' ~ instructor.name ~ '-')
+
+    - name: Clear organizer key and resolved answers before inventory export
+      ansible.builtin.set_fact:
+        _aia_event_bundle: {}
+        ctfd_flags: {}
+        aia_event_challenges: []
+        _aia_event_definitions: {}
+        _all_challenges: []
+      no_log: true

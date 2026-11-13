@@ -1,6 +1,7 @@
 # ansible_island_adventure.automation — Ansible Island Adventure Collection
 
-This collection contains automation for deploying and configuring the Ansible Island Adventure CTF platform on OpenShift CNV.
+This collection deploys and configures Ansible Island Adventure on the AWS
+leaderboard OpenShift cluster, with per-student EC2 managed nodes.
 
 ## Roles
 
@@ -11,6 +12,9 @@ Catalog workload roles live in this directory:
 - `roles/configure_devspaces/` — Read-only validation of the leaderboard CI's workspace policy, plus standalone repair for older deployments
 - `roles/validate_connectivity/` — Runtime connectivity gates and persistent evidence for each instructor
 - `roles/student_readiness/` — Catalog adapter for managed-node AAP access and connectivity validation
+- `roles/student_post_provision/` — Packaged event content, personal vault re-keying, repository access guide and AAP managed-node configuration
+- `roles/student_health/` — Final student CI gate for actual content, logins, vault usability and runtime paths
+- `roles/leaderboard_health/` — Final shared AWS cluster, storage, workload and HTTPS gate
 
 The project root also retains `ansible-testing/` playbooks and the
 `collections/ansible_collections/rhpds/aia/` collection for local role development.
@@ -19,17 +23,18 @@ The collection's `deploy_vms` role is currently a stub.
 ## Usage
 
 Order the leaderboard CI first, wait for deployment, then order the student CI
-using the leaderboard's five provision fields. Workload deployment runs through
-RHDP provisioning. See the [root README](../../README.md#quick-start) for manual
-ordering and the SSO-enabled `utils/dev-environment.py` CLI, which reuses the
-leaderboard for subsequent student deployments.
+using the leaderboard's five provision fields. The AWS catalogs select this
+repository's collection revision. The inherited `utils/dev-environment.py`
+ordering defaults still target CNV and must not be used to order AWS items.
+See [AWS.md](../../AWS.md) for the supported AWS integration points.
 
 Catalog provisioning deploys CTFd, waits for health, initializes the admin and
 student accounts, completes setup, and publishes its URL and credentials. New
-instances have an empty challenge board and a landing page linking to login.
-Challenge definitions, archive generation/import, and challenge-count checks
-are excluded from the default role path. Reprovisioning preserves existing
-challenge data and event settings. The bootstrap command has its own timeout
+instances initially have an empty challenge board and a landing page linking to
+login. The AWS catalog then enables `instructor_config_post_provision`, completing
+real event content, repository configuration and the lab vault before the final
+student health gate. The flag defaults to false for legacy/bootstrap-only callers.
+Reprovisioning does not replace existing challenge IDs or solves. The bootstrap command has its own timeout
 and retry settings: `ctfd_bootstrap_timeout` (120 seconds),
 `ctfd_bootstrap_retries` (2), and `ctfd_bootstrap_delay` (10 seconds).
 
@@ -97,11 +102,32 @@ commands that ignore termination are killed after another five seconds.
 
 ## Configure deployed students
 
-The deployment sequence has three responsibilities: the leaderboard CI creates
-the shared cluster and Dev Spaces service; the student CI integrates with that
-leaderboard and creates the requested student accounts and resources; this
-post-deploy playbook applies iterated configuration to those existing resources.
-The leaderboard CI owns the shared Dev Spaces workspace and storage policy.
+The leaderboard CI creates the shared cluster and owns the Dev Spaces workspace
+and storage policy. The AWS student catalog integrates with it, creates the
+student resources and completes the event through `student_post_provision`.
+`post_deploy.yml` remains available for iterated maintenance of existing students;
+it is not a required manual step once the corresponding AWS catalog change is
+deployed. The initial-load path imports only empty boards; answer updates preserve
+existing challenge IDs and scores.
+
+The collection packages its canonical challenge definitions under
+`roles/student_post_provision/vars/challenges.yml` and encrypted answers under
+`roles/student_post_provision/files/flags.vault`. The historical `ansible-testing`
+paths below are compatibility symlinks. The native catalog lookup uses the
+matching existing Ansible Vault credential attached to the RHDP job. Neither the
+key nor decrypted answers are published in user data, and transient answer/key
+facts are cleared before inventory export. Supply the organizer's Vault
+credential through the RHDP job or local `--vault-password-file`; do not place
+the key in committed catalog defaults.
+
+For a retained existing student, a maintenance play can include
+`ansible_island_adventure.automation.instructor_config` with
+`tasks_from: post_provision`, passing its original private student vars, selected
+leaderboard kubeconfig and organizer vault credential. This skips namespace,
+deployment and SSO bootstrap; CTFd retains its normal account/password
+synchronization. Run `ansible_island_adventure.automation.student_health` afterward.
+See [AWS.md](../../AWS.md#provisioning-gates-and-the-images-health-checks) for both
+native lifecycle hooks, report locations and validation boundaries.
 
 `post_deploy.yml` connects each already deployed student CI's CTFd instance and
 Gitea account. It uses the real definitions in
