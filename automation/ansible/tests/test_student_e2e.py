@@ -144,6 +144,21 @@ class JourneyTests(unittest.TestCase):
         self.assertEqual(report['status'], 'failed')
         self.assertEqual(report['checks']['cleanup']['status'], 'failed')
 
+    def test_missing_repository_asset_has_safe_actionable_diagnostic(self):
+        journey = e2e.Journey(data())
+        journey.git_http = MagicMock()
+        with patch.object(e2e.health, 'request', side_effect=e2e.health.HealthError('Unexpected HTTP status: 404')):
+            with self.assertRaisesRegex(e2e.E2EError, r'ansible-survival-kit/message-in-a-bottle.txt.*404'):
+                journey.repository_file('ansible-survival-kit', 'message-in-a-bottle.txt')
+
+    def test_repository_failure_does_not_hide_independent_readonly_results(self):
+        actions = self.stub_actions(READ_ACTIONS)
+        actions['repositories'].side_effect = e2e.E2EError('Required learner asset is missing')
+        report = e2e.Journey(data()).run()
+        self.assertEqual(report['status'], 'failed')
+        for key in ('vault', 'board', 'openshift', 'workspaces', 'inventory'):
+            self.assertEqual(report['checks'][key]['status'], 'passed')
+
     def test_command_failure_never_includes_private_output(self):
         with patch.object(e2e.subprocess, 'run', return_value=MagicMock(returncode=1, stdout='synthetic-secret', stderr='synthetic-token')):
             with self.assertRaises(e2e.E2EError) as error:

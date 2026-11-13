@@ -146,11 +146,14 @@ class Journey:
             result['status'] = 'passed'
         except Exception as error:
             result.update(status='blocked' if isinstance(error, Blocked) else 'failed',
-                          error=str(error) if isinstance(error, E2EError) else type(error).__name__)
+                          error=str(error) if isinstance(error, (E2EError, health.HealthError)) else type(error).__name__)
 
     def repository_file(self, repository, path, branch='main'):
         url = self.urls['gitea_url'] + '/api/v1/repos/' + self.user + '/' + repository + '/contents/' + path
-        result = health.request(self.git_http, 'GET', url, params={'ref': branch}).json()
+        try:
+            result = health.request(self.git_http, 'GET', url, params={'ref': branch}).json()
+        except health.HealthError as error:
+            raise E2EError('Required asset ' + repository + '/' + path + ' (' + branch + ') unavailable: ' + str(error)) from None
         return base64.b64decode(result['content'], validate=False)
 
     def repositories(self):
@@ -159,7 +162,10 @@ class Journey:
             self.report['repository_revisions'][repo] = {}
             for branch in branches:
                 url = self.urls['gitea_url'] + '/api/v1/repos/' + self.user + '/' + repo + '/branches/' + branch
-                revision = health.request(self.git_http, 'GET', url).json()['commit']['id']
+                try:
+                    revision = health.request(self.git_http, 'GET', url).json()['commit']['id']
+                except health.HealthError as error:
+                    raise E2EError('Required branch ' + repo + '/' + branch + ' unavailable: ' + str(error)) from None
                 self.report['repository_revisions'][repo][branch] = revision
         self.definitions = yaml.safe_load(self.repository_file('aia-instructor', 'roles/ctfd/vars/challenges.yml'))['ctfd_challenges']
         if not isinstance(self.definitions, list) or len(self.definitions) < 25:
@@ -194,6 +200,8 @@ class Journey:
             raise E2EError('Personal instructor vault is missing required exercise answers')
 
     def content(self):
+        if not hasattr(self, 'definitions'):
+            self.definitions = yaml.safe_load(self.repository_file('aia-instructor', 'roles/ctfd/vars/challenges.yml'))['ctfd_challenges']
         self.admin = Board(self.stack, self.urls['ctfd_url'], self.data['ctfd_admin_username'],
                            self.data['ctfd_admin_password'], self.verify)
         self.challenges = self.admin.challenges()
@@ -236,6 +244,13 @@ class Journey:
         return json.loads(command([self.oc, '--kubeconfig', str(self.kubeconfig), *args]))
 
     def workspace_readiness(self):
+        for repo in ('ansible-survival-kit', 'aia-instructor'):
+            if repo not in self.devfiles:
+                devfile = yaml.safe_load(self.repository_file(repo, '.devfile.yaml'))
+                components = [c for c in devfile.get('components', []) if 'container' in c and c['container'].get('mountSources')]
+                if not components:
+                    raise E2EError('Repository devfile lacks a developer container')
+                self.devfiles[repo] = components[0]['name']
         projects = self.oc_json(['get', 'projects', '-o', 'json'])['items']
         owned = [p['metadata']['name'] for p in projects if
                  p['metadata'].get('annotations', {}).get('openshift.io/requester') == self.user]
@@ -556,13 +571,13 @@ print("AIA_E2E_TOOLKIT_OK")
             full = self.mode == 'full'
             try:
                 self.step('repositories', 'M3/M4: Own repositories, devfiles and learner assets', self.repositories)
-                self.step('vault', 'M4: Personal lab password decrypts instructor answer vault', self.vault, ['repositories'])
-                self.step('board', 'M3: All base challenge names and six categories', self.content, ['repositories'])
+                self.step('vault', 'M4: Personal lab password decrypts instructor answer vault', self.vault)
+                self.step('board', 'M3: All base challenge names and six categories', self.content)
                 self.step('openshift', 'M4: Student CLI identity and personal CTFd route', self.student_openshift)
                 self.step('workspaces', 'M3/M4: Two running repository workspaces with separate Bound PVCs',
-                          self.workspace_readiness, ['repositories', 'openshift'])
+                          self.workspace_readiness, ['openshift'])
                 self.step('tools', 'M3/M4: Main branch and Ansible/Lint/Navigator in both workspaces',
-                          self.workspace_tools, ['workspaces'], enabled=exercise)
+                          self.workspace_tools, ['repositories', 'workspaces'], enabled=exercise)
                 self.step('inventory', 'M3: Own AAP inventory, web membership and credentials', self.aap_inventory)
                 self.step('player', 'M3: Disposable player profile, DONE solve and island unlock',
                           self.create_player, ['board', 'vault', 'tools'], enabled=exercise)
