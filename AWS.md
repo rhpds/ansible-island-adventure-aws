@@ -32,7 +32,8 @@ Endpoints and an edge-TLS OpenShift Route to the student's EC2 HTTP port.
 The Apache challenge is still installed by the learner, not by bootstrap.
 student_readiness uses the EC2 SSH endpoint, not CNV NodePorts. Showroom is
 explicitly authenticated to the leaderboard, with the token masked in logs.
-Showroom content continues to use the original public content repository.
+Showroom content uses this AWS repository on main. The Antora playbook
+reads its local content/ directory; the original CNV source remains independent.
 
 ## Repository and deployment refs
 

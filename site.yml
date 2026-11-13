@@ -1,7 +1,7 @@
 ---
 site:
   title: Ansible Island Adventure
-  url: https://github.com/rhpds/ansible-island-adventure
+  url: https://github.com/rhpds/ansible-island-adventure-aws
   start_page: modules::index.adoc
 
 content:

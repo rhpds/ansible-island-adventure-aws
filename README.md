@@ -21,9 +21,10 @@ ODF uses gp3-backed storage and supplies CephFS RWX for AAP Hub. Student
 managed nodes use EC2 SSH endpoints and an OpenShift HTTPS route for the
 Apache challenge. See [AWS.md](AWS.md) for architecture and validation limits.
 
-Showroom content remains in the original public repository. Inherited content
-and utility scripts are retained as reference; their CNV ordering defaults
-must not be used to order AWS environments. This copy is not registered as
+Showroom content is served from this AWS repository on main, using site.yml
+and the local content/ directory. The original CNV content repository remains
+independent. Inherited utility scripts retain CNV ordering defaults and must
+not be used to order AWS environments. This copy is not registered as
 the original Publishing House project and does not publish workflow updates.
 
 ## Tests
