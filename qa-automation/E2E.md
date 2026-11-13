@@ -137,13 +137,30 @@ Select one exported inventory hostname with
   generated object IDs and AAP job URLs, not answers, passwords, tokens, cookies,
   job stdout, decrypted Vault data or raw exception messages.
 
-Every completed E2E run ends with a table, counts, overall status, coverage and
-evidence location. Failure or a BLOCKED required stage returns nonzero. Disabled
-steps are SKIPPED and inspection/exercise report **partial** coverage even when
-enabled tests pass. Only a successful `full` run reports
-`full-automated-journey`, still subject to the manual boundaries above.
+Every completed E2E run ends with a table showing **Testing type** and result:
+
+- **Unattended**: an automated check that ran; its PASSED/FAILED/BLOCKED result is
+  retained. Failed/blocked checks include the human action needed to unblock them.
+- **Attended / PENDING**: an exercise awaiting human authorization/prerequisites,
+  or a manual-only content/browser/facilitation validation. The summary states
+  **Human intervention required** and the action needed before further testing,
+  rather than displaying a bare SKIPPED result.
+
+The summary includes automated totals, attended-pending counts, coverage and the
+evidence path. Manual-only topics are listed explicitly even after all enabled
+automated checks pass. They are not included in automated pass counts. Failure
+or a BLOCKED required automated stage still returns nonzero; pending attended
+checks never become passes. For compatibility, disabled automated steps retain
+`status: skipped` in JSON, with `test_type: attended`, `requires_human: true` and
+`human_action` metadata. Manual-only topics are in `attended_checks`.
+
+Inspection/exercise report **partial** coverage even when enabled tests pass.
+Only a successful `full` run reports `full-automated-journey`, still subject to
+the explicitly attended validations above; it does not claim a full human-reviewed
+E2E pass.
 
 Reports use `/tmp/aia-e2e/<guid>.<run-id>.e2e.json` (or `$TMPDIR`) with mode
 `0600` in a `0700` directory. Override `aia_e2e_report_dir` for persistent local
 evidence. `aia_e2e_job_timeout` defaults to 600 seconds per AAP job (30–1800
-supported). `--check` does not execute E2E and reports SKIPPED.
+supported). `--check` does not execute E2E and reports NOT RUN, with human
+authorization required before a normal run.

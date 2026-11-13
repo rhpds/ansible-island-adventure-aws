@@ -29,6 +29,23 @@ from library import aia_student_health as health
 from library.aia_connectivity import Controller
 
 
+# These are not automated by this runner; keep them visible in every final report.
+ATTENDED_CHECKS = [
+    dict(title='Index/M1/M2: Rendered pages, student attributes, navigation and resource links',
+         action='Review the student Showroom in a browser; validate links, substitutions and orientation content.'),
+    dict(title='M3/M4: Browser login, SSO consent and workspace creation',
+         action='Log in as the student and create both persistent repository workspaces using their devfiles.'),
+    dict(title='M3: External Ansible Quest, trivia and hint-purchase experience',
+         action='Play the external game and review trivia/hints through the student CTFd UI.'),
+    dict(title='M4: Profile/settings, awards and purchased-hint preservation',
+         action='On an explicitly authorized disposable board, verify reset retention beyond automated solves/IDs.'),
+    dict(title='M5: New challenges, flags, categories, prerequisites, visibility and advanced verifier',
+         action='Perform the optional customization exercises; advanced verification requires a real deployed verifier.'),
+    dict(title='M1/M2/M6: Staffing, venue, pacing, debrief, engagement interpretation and follow-up',
+         action='Facilitator reviews the logistics and completes the discussion, metrics interpretation and pipeline plan.'),
+]
+
+
 class E2EError(Exception):
     pass
 
@@ -125,6 +142,8 @@ class Journey:
         self.verify = data.get('validate_certs', True)
         self.id = uuid.uuid4().hex
         self.report = dict(id=self.id, guid=self.guid, mode=mode, checks={}, aap_jobs=[], generated_resources=[],
+                           attended_checks=[dict(check, test_type='attended', status='pending', requires_human=True)
+                                            for check in ATTENDED_CHECKS],
                            started=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                            boundaries=['No browser UI automation or external Ansible Quest gameplay',
                                        'Facilitation, timing and pipeline discussions remain manual'])
@@ -132,20 +151,37 @@ class Journey:
         self.player_id = None
         self.active_job_uncertain = False
 
+    def follow_up(self, key):
+        exercise = 'After prerequisites are ready, authorize exercise mode with aia_e2e_confirm_guid=' + self.guid + '.'
+        return {
+            'repositories': 'Organizer must complete student-access preparation and supply the missing repository assets/access guide.',
+            'vault': 'Organizer must supply the source Vault key privately and re-key the instructor vault with the student lab password.',
+            'board': 'Organizer must load the correct challenge definitions and real flags without clearing existing progress.',
+            'workspaces': 'Student must open both repository workspaces in Dev Spaces with separate persistent storage and keep them running.',
+            'reset': 'Human approval required: full mode plus aia_e2e_reset_confirm_guid=' + self.guid + ' clears ALL progress on this personal board.',
+            'update': 'Human approval required for the full reset/update lifecycle with both student GUID confirmations.',
+            'cleanup': 'Review this run\'s generated resource IDs; retained resources may belong to an unconfirmed running job.',
+        }.get(key, exercise if key not in ('openshift', 'inventory') else
+              'Correct the student access/inventory prerequisite reported above and rerun the unattended check.')
+
     def step(self, key, title, action, needs=(), enabled=True, skip_reason='Not enabled in this mode'):
-        result = dict(title=title)
+        result = dict(title=title, test_type='unattended' if enabled else 'attended', requires_human=False)
         self.report['checks'][key] = result
         if not enabled:
-            result.update(status='skipped', reason=skip_reason)
+            # Preserve the machine-readable execution status; the human summary renders
+            # this as ATTENDED / PENDING with an explicit action, never as a pass.
+            result.update(status='skipped', reason=skip_reason, requires_human=True, human_action=self.follow_up(key))
             return
         if any(self.report['checks'].get(name, {}).get('status') != 'passed' for name in needs):
-            result.update(status='blocked', error='Required preceding journey step did not pass')
+            result.update(status='blocked', error='Required preceding journey step did not pass',
+                          requires_human=True, human_action=self.follow_up(key))
             return
         try:
             action()
             result['status'] = 'passed'
         except Exception as error:
-            result.update(status='blocked' if isinstance(error, Blocked) else 'failed',
+            result.update(status='blocked' if isinstance(error, Blocked) else 'failed', requires_human=True,
+                          human_action=self.follow_up(key),
                           error=str(error) if isinstance(error, (E2EError, health.HealthError)) else type(error).__name__)
 
     def repository_file(self, repository, path, branch='main'):

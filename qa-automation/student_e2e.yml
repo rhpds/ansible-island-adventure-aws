@@ -10,9 +10,10 @@
     e2e_summary: |-
       STUDENT E2E SUMMARY
       Student: {{ guid }} | Mode: {{ aia_e2e_mode }}
-      | Journey test                                                            | Result  |
-      |-------------------------------------------------------------------------|---------|
-      {% set counts = namespace(passed=0, failed=0, blocked=0, skipped=0) %}
+      Unattended = automated check. Attended = human intervention/approval required before further testing.
+      | Journey test                                                            | Testing type | Result  |
+      |-------------------------------------------------------------------------|--------------|---------|
+      {% set counts = namespace(passed=0, failed=0, blocked=0, pending=0, manual=0, actions=0) %}
       {% for check in (e2e_report | default({})).get('checks', {}).values() %}
       {% set status = check.status %}
       {% if status == 'passed' %}
@@ -20,23 +21,40 @@
       {% elif status == 'blocked' %}
       {% set counts.blocked = counts.blocked + 1 %}
       {% elif status == 'skipped' %}
-      {% set counts.skipped = counts.skipped + 1 %}
+      {% set counts.pending = counts.pending + 1 %}
       {% else %}
       {% set counts.failed = counts.failed + 1 %}
       {% endif %}
-      | {{ '%-71s' | format(check.title) }} | {{ '%-7s' | format(status | upper) }} |
+      {% set testing_type = check.test_type | default('attended' if status == 'skipped' else 'unattended') %}
+      | {{ '%-71s' | format(check.title) }} | {{ '%-12s' | format(testing_type | title) }} | {{ '%-7s' | format('PENDING' if status == 'skipped' else status | upper) }} |
       {% if check.error is defined %}
       Reason: {{ check.error }}
       {% elif check.reason is defined %}
       Reason: {{ check.reason }}
       {% endif %}
+      {% if check.requires_human | default(status in ['failed', 'blocked', 'skipped']) %}
+      {% set counts.actions = counts.actions + 1 %}
+      Human intervention required: {{ check.human_action | default('Resolve the prerequisite or authorize this student-specific exercise before further testing.') }}
+      {% endif %}
       {% endfor %}
-      Passed: {{ counts.passed }} | Failed: {{ counts.failed }} | Blocked: {{ counts.blocked }} | Skipped: {{ counts.skipped }}
-      Overall: {{ (e2e_report | default({})).get('status', 'failed') | upper }}
+      ATTENDED VALIDATION — HUMAN INTERVENTION REQUIRED
+      {% for check in (e2e_report | default({})).get('attended_checks', []) %}
+      {% set counts.manual = counts.manual + 1 %}
+      | {{ '%-71s' | format(check.title) }} | Attended     | PENDING |
+      Human action: {{ check.action }}
+      {% endfor %}
+      {% if (e2e_report | default({})).get('error') %}
+      {% set counts.actions = counts.actions + 1 %}
+      Human intervention required: Resolve the E2E runner/input error below before further testing.
+      {% endif %}
+      Automated results: Passed {{ counts.passed }} | Failed {{ counts.failed }} | Blocked {{ counts.blocked }}
+      Attended pending: {{ counts.pending + counts.manual }} | Human actions required: {{ counts.actions + counts.manual }}
+      Automated result: {{ (e2e_report | default({})).get('status', 'failed') | upper }}
+      Full E2E validation: {{ 'HUMAN INTERVENTION REQUIRED' if counts.pending + counts.manual + counts.actions > 0 else 'See coverage and manual boundaries below' }}
       Coverage: {{ (e2e_report | default({})).get('coverage', 'partial') }}
       {{ (e2e_report | default({})).get('error', '') }}
       {% if aia_e2e_mode != 'full' %}
-      This is NOT a full learner-journey pass: unexercised stages are explicitly skipped.
+      This is NOT a full learner-journey pass: attended steps require human action before further testing.
       {% endif %}
       Evidence: {{ e2e_evidence.dest | default('not saved') }}
       Browser UI, external game play, facilitation and pipeline discussions remain manual.
@@ -109,5 +127,5 @@
 
     - name: Explain check-mode E2E coverage
       ansible.builtin.debug:
-        msg: "STUDENT E2E SUMMARY: SKIPPED (check mode); no journey actions were run."
+        msg: "STUDENT E2E SUMMARY: NOT RUN (check mode). Attended: human must authorize a normal run before further testing; no journey actions were run."
       when: ansible_check_mode

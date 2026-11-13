@@ -73,6 +73,13 @@ class JourneyTests(unittest.TestCase):
         self.assertEqual(report['coverage'], 'partial')
         self.assertEqual(report['checks']['reset']['status'], 'skipped')
         self.assertEqual(report['checks']['cli']['status'], 'skipped')
+        self.assertEqual(report['checks']['cli']['test_type'], 'attended')
+        self.assertTrue(report['checks']['cli']['requires_human'])
+        self.assertIn('aia_e2e_confirm_guid=test', report['checks']['cli']['human_action'])
+        self.assertEqual(report['checks']['openshift']['test_type'], 'unattended')
+        self.assertFalse(report['checks']['openshift']['requires_human'])
+        self.assertTrue(all(c['test_type'] == 'attended' and c['status'] == 'pending'
+                            for c in report['attended_checks']))
         for mock in forbidden.values():
             mock.assert_not_called()
         self.assertNotIn('synthetic-secret', json.dumps(report))
@@ -82,6 +89,9 @@ class JourneyTests(unittest.TestCase):
         actions['workspace_readiness'].side_effect = e2e.Blocked('Open both workspaces first')
         report = e2e.Journey(data(), 'exercise', 'test').run()
         self.assertEqual(report['status'], 'failed')
+        self.assertEqual(report['checks']['workspaces']['test_type'], 'unattended')
+        self.assertTrue(report['checks']['workspaces']['requires_human'])
+        self.assertIn('separate persistent storage', report['checks']['workspaces']['human_action'])
         for key in ('workspaces', 'tools', 'player', 'cli', 'project', 'web'):
             self.assertEqual(report['checks'][key]['status'], 'blocked')
         actions['create_player'].assert_not_called()
@@ -240,8 +250,12 @@ class E2EPlaybookTests(unittest.TestCase):
 p=json.load(sys.stdin)
 assert p['data']['ocp_username']=='instructor-test'
 status='blocked' if p['data'].get('lab_password')=='blocked-test' else 'passed'
-print(json.dumps(dict(id='fixture',status='failed' if status=='blocked' else 'passed',coverage='partial',checks={'workspace':dict(title='Two running repository workspaces',status=status)})))
+print(json.dumps(dict(id='fixture',status='failed' if status=='blocked' else 'passed',coverage='partial',checks={
+ 'workspace':dict(title='Two running repository workspaces',status=status,test_type='unattended',requires_human=status=='blocked',human_action='Open both persistent workspaces'),
+ 'exercise':dict(title='Participant exercise',status='skipped',test_type='attended',requires_human=True,human_action='Approve exercise for this student')},
+ attended_checks=[dict(title='Browser review',action='Review the student Showroom pages',test_type='attended',status='pending')])))
 ''')
+        compile((self.root / 'student_e2e.py').read_text(), 'fixture-student-e2e.py', 'exec')
         self.env = dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(self.root / 'vault'), ANSIBLE_NOCOLOR='1')
         (self.root / 'vault').write_text('unused-test-vault\n')
         self.report_dir = self.root / 'reports'
@@ -261,6 +275,13 @@ print(json.dumps(dict(id='fixture',status='failed' if status=='blocked' else 'pa
         self.assertIn('STUDENT E2E SUMMARY', result.stdout)
         self.assertIn('This is NOT a full learner-journey pass', result.stdout)
         self.assertIn('Coverage: partial', result.stdout)
+        self.assertIn('Unattended', result.stdout)
+        self.assertIn('Attended', result.stdout)
+        self.assertIn('PENDING', result.stdout)
+        self.assertIn('Attended pending: 2', result.stdout)
+        self.assertIn('Human intervention required: Approve exercise for this student', result.stdout)
+        self.assertIn('Full E2E validation: HUMAN INTERVENTION REQUIRED', result.stdout)
+        self.assertNotIn('SKIPPED', result.stdout)
         report = self.report_dir / 'test.fixture.e2e.json'
         self.assertEqual(report.stat().st_mode & 0o777, 0o600)
         self.assertNotIn('synthetic-secret', report.read_text() + result.stdout + result.stderr)
@@ -270,6 +291,7 @@ print(json.dumps(dict(id='fixture',status='failed' if status=='blocked' else 'pa
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('STUDENT E2E SUMMARY', result.stdout)
         self.assertIn('BLOCKED', result.stdout)
+        self.assertIn('Human intervention required: Open both persistent workspaces', result.stdout)
         self.assertTrue((self.report_dir / 'test.fixture.e2e.json').exists())
 
     def test_unconfirmed_exercise_is_rejected_before_execution(self):

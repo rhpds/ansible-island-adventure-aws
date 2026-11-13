@@ -260,7 +260,7 @@ m.exit_json(changed=False, report=dict(id='runtime', status='passed', sources={k
         result = self.run_play('-i', 'localhost,', '--check', '-e',
                                'aia_healthcheck_user_data_file=' + str(user_data))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn('STUDENT E2E SUMMARY: SKIPPED', result.stdout)
+        self.assertIn('STUDENT E2E SUMMARY: NOT RUN (check mode)', result.stdout)
         self.assertFalse(self.reports.exists())
 
     def exported_inventory(self):
