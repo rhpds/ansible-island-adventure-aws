@@ -2,9 +2,10 @@
 """Read-only service/login checks for one deployed AWS student CI."""
 import datetime
 from html.parser import HTMLParser
+from pathlib import Path
 import re
 import uuid
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 from ansible.module_utils.basic import AnsibleModule
 import requests
@@ -76,6 +77,41 @@ def ctfd_login(url, username, password, admin, verify):
         # Zero challenges is valid before the separate event-content load.
 
 
+def openshift_login(domain, username, password, verify=True, api_url=None, ca_file=None):
+    oauth = 'https://oauth-openshift.' + domain
+    # Inside Showroom, use only the mounted CA certificate, NEVER its SA token.
+    # The student OAuth token authenticates the API request in both execution modes.
+    mounted_ca = Path('/var/run/secrets/kubernetes.io/serviceaccount/ca.crt')
+    if not api_url:
+        if mounted_ca.is_file():
+            api_url = 'https://kubernetes.default.svc'
+            ca_file = ca_file or str(mounted_ca)
+        elif domain.startswith('apps.'):
+            api_url = 'https://api.' + domain.removeprefix('apps.') + ':6443'
+        else:
+            raise HealthError('Supply the OpenShift API URL for this ingress domain')
+    api_url = origin(api_url)
+    state = uuid.uuid4().hex
+    with requests.Session() as session:
+        session.verify = verify
+        response = request(session, 'GET', oauth + '/oauth/authorize', codes=(302,),
+                           params=dict(client_id='openshift-challenging-client', response_type='token', state=state),
+                           auth=(username, password), headers={'X-CSRF-Token': '1'})
+        redirect = urlsplit(response.headers.get('Location', ''))
+        fragment = parse_qs(redirect.fragment)
+        if (redirect.scheme != 'https' or redirect.netloc != urlsplit(oauth).netloc
+                or redirect.path != '/oauth/token/implicit' or fragment.get('state') != [state]
+                or len(fragment.get('access_token', [])) != 1):
+            raise HealthError('OpenShift student OAuth login did not return a valid token')
+        token = fragment['access_token'][0]
+        # Never forward the password, follow redirects or expose token-bearing URLs.
+        user = request(session, 'GET', api_url + '/apis/user.openshift.io/v1/users/~',
+                       headers={'Authorization': 'Bearer ' + token},
+                       verify=(ca_file or True) if verify else False).json()
+        if user.get('kind') != 'User' or user.get('metadata', {}).get('name') != username:
+            raise HealthError('OpenShift authenticated username does not match the student')
+
+
 def measure(data, verify=True):
     guid = data.get('guid', '')
     if not re.fullmatch(r'[a-z0-9][a-z0-9-]*', guid):
@@ -84,6 +120,8 @@ def measure(data, verify=True):
     domain = data.get('openshift_cluster_ingress_domain') or data.get('apps_domain')
     if not isinstance(domain, str) or not re.fullmatch(r'[A-Za-z0-9.-]+', domain):
         raise HealthError('Missing or invalid leaderboard ingress domain')
+    if data.get('ocp_username', data.get('keycloak_username')) != expected:
+        raise HealthError('OpenShift login must use this student identity')
     for key in ('aap_username', 'gitea_username', 'keycloak_username'):
         if data.get(key) != expected:
             raise HealthError(key + ' does not match the student GUID')
@@ -151,6 +189,9 @@ def measure(data, verify=True):
         finally:
             client.close()
 
+    check('ocp_student_login', lambda: openshift_login(
+        domain, expected, data.get('ocp_password', data.get('keycloak_password', data.get('gitea_password'))),
+        verify, data.get('ocp_api_url') or None, data.get('ocp_ca_file') or None))
     check('ssh_identity_and_sudo', ssh_identity)
     check('gitea_login_and_repositories', gitea)
     check('ctfd_student_login', lambda: ctfd_login(urls['ctfd_url'], data['ctfd_student_username'],

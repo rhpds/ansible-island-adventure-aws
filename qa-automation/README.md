@@ -85,6 +85,17 @@ targets fail rather than establish health.
 
 ## Checks and evidence
 
+- OpenShift student password login through the OAuth challenging client, followed
+  by an authenticated `users/~` API request that must return `instructor-<guid>`.
+  Uses `ocp_username`/`ocp_password` when supplied, otherwise the published
+  Keycloak credentials (falling back to the exported Gitea student credentials).
+  Admin usernames are rejected. Tokens stay in memory and are not written to
+  reports, kubeconfig files or command-line arguments. In Showroom, the API
+  request uses `kubernetes.default.svc` and its mounted CA **certificate only**;
+  the service-account token is never read. Outside the cluster, the API URL is
+  derived from `apps.<cluster-domain>` or set with `aia_healthcheck_ocp_api_url`.
+  For a private API CA, supply `aia_healthcheck_ocp_ca_file`; TLS verification
+  remains enabled by default.
 - Gitea authenticated username and ownership/access to `ansible-survival-kit`
   and `aia-instructor` repositories.
 - Separate CTFd student/admin logins and authenticated challenge API. Empty

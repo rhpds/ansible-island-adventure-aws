@@ -76,7 +76,7 @@ class ServiceTests(unittest.TestCase):
              patch('paramiko.SSHClient') as ssh:
             ssh.return_value.connect.side_effect = RuntimeError('synthetic-secret')
             report = health.measure(fields())
-        self.assertEqual(len(report['checks']), 6)
+        self.assertEqual(len(report['checks']), 7)
         self.assertEqual(report['status'], 'failed')
         self.assertNotIn('synthetic-secret', json.dumps(report))
 
@@ -92,6 +92,7 @@ class ServiceTests(unittest.TestCase):
                 payload = {'issuer': data['keycloak_url'] + '/realms/sso'}
             return MagicMock(json=lambda: payload)
         with patch.object(health, 'request', side_effect=response), \
+             patch.object(health, 'openshift_login'), \
              patch.object(health, 'ctfd_login') as login, patch('paramiko.SSHClient') as ssh:
             output = MagicMock()
             output.read.return_value = b'rhel.one.internal\n'
@@ -106,8 +107,56 @@ class ServiceTests(unittest.TestCase):
             report = health.measure(data)
             self.assertEqual(report['checks']['ssh_identity_and_sudo']['status'], 'failed')
 
+    def test_ocp_login_uses_student_password_then_student_bearer_token(self):
+        def response(session, method, url, **kwargs):
+            if url.endswith('/oauth/authorize'):
+                return MagicMock(headers={'Location': 'https://oauth-openshift.apps.example.test/oauth/token/implicit'
+                                          + '#access_token=synthetic-token&state=' + kwargs['params']['state']})
+            return MagicMock(json=lambda: {'kind': 'User', 'metadata': {'name': 'instructor-one'}})
+        with patch.object(health, 'request', side_effect=response) as request:
+            health.openshift_login('apps.example.test', 'instructor-one', 'synthetic-password',
+                                   api_url='https://api.example.test:6443', ca_file='/private/cluster-ca.crt')
+        self.assertEqual(request.call_count, 2)
+        auth_call, api_call = request.call_args_list
+        self.assertEqual(auth_call.kwargs['auth'], ('instructor-one', 'synthetic-password'))
+        self.assertEqual(api_call.kwargs['headers'], {'Authorization': 'Bearer synthetic-token'})
+        self.assertNotIn('auth', api_call.kwargs)
+        self.assertEqual(api_call.kwargs['verify'], '/private/cluster-ca.crt')
+        self.assertTrue(api_call.args[2].endswith('/apis/user.openshift.io/v1/users/~'))
+
+    def test_ocp_login_rejects_bad_oauth_and_wrong_identity(self):
+        for failure in ('missing-token', 'wrong-state', 'external-redirect', 'wrong-user'):
+            with self.subTest(failure=failure):
+                def response(session, method, url, **kwargs):
+                    if url.endswith('/oauth/authorize'):
+                        host = 'other.example.test' if failure == 'external-redirect' else 'oauth-openshift.apps.example.test'
+                        state = 'wrong' if failure == 'wrong-state' else kwargs['params']['state']
+                        token = '' if failure == 'missing-token' else 'access_token=synthetic-token&'
+                        return MagicMock(headers={'Location': 'https://' + host + '/oauth/token/implicit#' + token + 'state=' + state})
+                    return MagicMock(json=lambda: {'kind': 'User', 'metadata': {'name': 'admin'}})
+                with patch.object(health, 'request', side_effect=response) as request:
+                    with self.assertRaises(health.HealthError) as error:
+                        health.openshift_login('apps.example.test', 'instructor-one', 'synthetic-password',
+                                               api_url='https://api.example.test:6443')
+                    self.assertNotIn('synthetic-token', str(error.exception))
+                    self.assertEqual(request.call_count, 2 if failure == 'wrong-user' else 1)
+
+    def test_ocp_login_uses_mounted_ca_but_not_service_account_credentials(self):
+        def response(session, method, url, **kwargs):
+            if url.endswith('/oauth/authorize'):
+                return MagicMock(headers={'Location': 'https://oauth-openshift.apps.example.test/oauth/token/implicit'
+                                          + '#access_token=student-token&state=' + kwargs['params']['state']})
+            return MagicMock(json=lambda: {'kind': 'User', 'metadata': {'name': 'instructor-one'}})
+        with patch.object(health.Path, 'is_file', return_value=True), \
+             patch.object(health, 'request', side_effect=response) as request:
+            health.openshift_login('apps.example.test', 'instructor-one', 'synthetic-password')
+        api_call = request.call_args_list[1]
+        self.assertTrue(api_call.args[2].startswith('https://kubernetes.default.svc/'))
+        self.assertEqual(api_call.kwargs['verify'], '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt')
+        self.assertEqual(api_call.kwargs['headers']['Authorization'], 'Bearer student-token')
+
     def test_wrong_student_or_leader_is_rejected_before_requests(self):
-        for key, value in [('aap_username', 'instructor-other'),
+        for key, value in [('ocp_username', 'admin'), ('aap_username', 'instructor-other'),
                            ('ctfd_url', 'https://island-instructor-other-ctfd.apps.example.test'),
                            ('gitea_url', 'https://gitea.other.example.test'),
                            ('aap_url', 'https://user:secret@aap.apps.example.test')]:
