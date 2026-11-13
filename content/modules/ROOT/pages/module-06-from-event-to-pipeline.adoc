@@ -1,7 +1,7 @@
 = From Event to Pipeline
 :navtitle: 6. From Event to Pipeline
 
-Allow *10 minutes* for positioning, engagement analysis, and a short follow-up plan. Continue longer discussion or Q&A after the training session if needed.
+This module explores positioning, engagement analysis, and a short follow-up plan. Continue longer discussion or Q&A after the training session if needed.
 
 == Positioning and Lead Generation
 

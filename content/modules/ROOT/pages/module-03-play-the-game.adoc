@@ -4,10 +4,11 @@
 
 == Timing and Participant Mode
 
-Allow *50 minutes*: *10 minutes for service access and workspace setup*, *35 minutes of scored play*, and *5 minutes for debrief and saving your results*.
 The facilitator starts the scoring clock once everyone is ready. All flag submissions, including Warm Up, belong inside that 35-minute window. Choose challenges that fit your experience; completing every exercise below is not required.
 
-Use your player account and the *Ansible Survival Kit* throughout this module. The environment, challenges, AAP inventory, and Machine credential have already been prepared by the organizer. You do not need the instructor toolkit, an instructor vault-password file, or a terminal `oc login` to perform the exercises below. You will explore event administration in Module 4.
+Use your player account and the *Ansible Survival Kit* throughout this module. The environment, challenges, AAP inventory, and Machine credential have already been prepared by the organizer. 
+
+You do not need the instructor toolkit, an instructor vault-password file, or a terminal `oc login` to perform the exercises below. You will explore event administration in Module 4.
 
 == Receive Handouts and Orientation
 

@@ -14,4 +14,4 @@ Use your CTFd player account during gameplay. Gitea, AAP, and Dev Spaces are sha
 | Dev Spaces / OpenShift browser login | `{keycloak_username}`
 |===
 
-Use the provisioned lab password for these accounts. Instructor administration is covered after gameplay.
+Use the provisioned lab password for these accounts. Instructor administration is covered after gameplay. These credentials are copied throughout this lab, but for convinces you may wish to copy  them to your notes for quick access.

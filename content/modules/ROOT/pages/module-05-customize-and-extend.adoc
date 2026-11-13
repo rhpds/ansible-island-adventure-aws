@@ -1,7 +1,7 @@
 = Customize and Extend
 :navtitle: 5. Customize and Extend
 
-Allow *20 minutes* for challenge editing, applying a content update, and verifying progress preservation. The organizer provisioning workflow later in this module is reference material; catalog ordering and post-deploy preparation take place before learners arrive, outside the training clock.
+In this module we explore challenge editing, applying a content update, and verifying progress preservation. The organizer provisioning workflow later in this module is reference material; catalog ordering and post-deploy preparation take place before learners arrive, outside the training clock.
 
 == Modify Challenge Content
 

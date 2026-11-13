@@ -1,24 +1,24 @@
 = Welcome to the Island
 :navtitle: 1. Welcome to the Island
 
-Allow *10 minutes* for this overview. Modules 1 and 2 introduce the event; Module 3 lets you play as a participant before learning the administration workflow.
+Modules 1 and 2 introduce the event; Module 3 lets you play as a participant before learning the administration workflow.
 
 == Introduction to Ansible Island Adventure
 
 Ansible Island Adventure is a gamified *Capture the Flag (CTF)* competition built around Red Hat Ansible Automation Platform.
 Wrapped in a pirate-themed narrative, participants solve challenges that exercise real Ansible skills — from basic CLI commands to orchestrating workloads through the Automation Controller.
 
-The event is already built and *proven with customers*.
-This lab teaches you how to use it, deliver it, and customize it for your own engagements.
+A number of customers have gone through successful events. Joon Paiki (SSA Enterprise) is the original author. This version is provided by Matt Fernandez (SSA, NAPS) and Sean Cavanaugh (TMM, NA).
+This lab provides resources, teaches you how to use them, deliver the event, and extend for your own needs.
 
 == The Customer Experience
 
 When a customer attends an Ansible Island Adventure event, the experience follows this flow:
 
-. *Registration* — Participants receive a handout with their login credentials, shortened URLs, and a brief overview of the event.
-. *Access CTFd* — They log into the CTFd scoring platform using the credentials on their handout.
+. *Access Information* — Participants receive a handout with their login credentials, shortened URLs, and a brief overview of the event.
+. *Explore Logins* — They log into CTFd, Gitea, DevSpaces, and AAP using the credentials on their handout. CTFd is the scoring platform, Gitea is their repo, and DevSpaces is their workspace.
 . *Work through challenges* — Challenges are organized into categories of increasing difficulty. Each completed challenge yields a _flag_ that participants submit to CTFd for points.
-. *Leaderboard competition* — A live leaderboard drives friendly competition and keeps energy high throughout the event.
+. *Leaderboard competition* — A live leaderboard displays each user's score and drives friendly competition to keep energy high throughout the event.
 . *Debrief* — Facilitators recap the challenges and connect the experience to Ansible Automation Platform capabilities.
 
 Plan for *1–1.5 hours* for the customer-facing event, with *30–45 minutes of challenges and a strict 45-minute challenge limit*. Schedule additional networking and extended debrief time afterward. Participants are not expected to finish every challenge.

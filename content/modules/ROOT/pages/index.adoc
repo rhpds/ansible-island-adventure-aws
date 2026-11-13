@@ -6,7 +6,7 @@
 Ansible Island Adventure is a proven, customer-facing Capture the Flag (CTF) competition built around *Red Hat Ansible Automation Platform*.
 This "teach the teacher" lab enables you — a Solution Architect, TAM, or partner engineer — to independently order, deliver, customize, and generate pipeline from Ansible Island Adventure events.
 
-Your environment is *already deployed* from the Red Hat Demo Platform (RHDP).
+Your environment provisioned from the Red Hat Demo Platform (RHDP).
 You will play through the challenges as a participant would, explore the running architecture and instructor toolkit, modify challenge content, and learn how to position the event for pipeline generation.
 
 == What You Will Learn
@@ -28,17 +28,21 @@ This is the facilitator-training duration. A customer-facing event is shorter: *
 |===
 | Module | Title | Duration
 
-| 1 | Welcome to the Island | 10 min
-| 2 | Prerequisites and Logistics | 10 min
-| 3 | Play the Game | 50 min
-| 4 | Explore the Environment | 20 min
-| 5 | Customize and Extend | 20 min
+| 1 | Welcome to the Island | 5 min
+| 2 | Prerequisites and Logistics | 5 min
+| 3 | Play the Game | 40 min
+| 4 | Explore the Environment | 10 min
+| 5 | Customize and Extend | 45 min
 | 6 | From Event to Pipeline | 10 min
 |===
 
-Module 3 includes 10 minutes of participant access and workspace setup, 35 minutes of scored play including Warm Up, and 5 minutes of debrief and saving results. Module 4 then introduces the instructor workspace, vault setup, and a controlled reset of your personal training board. Keep your gameplay notes for Module 6; after the reset, one new Warm Up solve will demonstrate progress preservation in Module 5.
+Module 3 includes 5 minutes of participant access and workspace setup, 35 minutes of scored play including Warm Up, and 5 minutes of debrief and saving results. 
 
-Catalog provisioning, organizer post-deploy configuration, and readiness checks happen *before* the two-hour training session. Customer-event timing is described separately in Module 2.
+Module 4 then introduces the instructor workspace, playbook setup, and a controlled reset of your individual CTDd instance. 
+
+Keep your gameplay notes for Module 6; after the reset, one new Warm Up solve will demonstrate progress preservation in Module 5.
+
+Customer-event timing is described separately in Module 2.
 
 == Your Environment
 

@@ -2,8 +2,6 @@
 :navtitle: 4. Explore the Environment
 :page-aliases: module-03-explore-the-environment.adoc
 
-Allow *20 minutes*: approximately *5 minutes for the architecture tour*, *7 minutes for the instructor workspace, OpenShift login, and vault setup*, and *8 minutes for the playbook walkthrough, reset, and verification*.
-
 You have played as a participant in Module 3. Now switch to administering your own training board. Keep the score and challenge notes you saved; the controlled reset below removes that board's game progress.
 
 == Architecture Tour on OpenShift
