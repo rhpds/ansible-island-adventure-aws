@@ -134,11 +134,59 @@
   hosts: "{{ aia_healthcheck_hosts | default('localhost') }}"
   connection: local
   gather_facts: false
+  vars:
+    health_summary_service_checks:
+      OpenShift student login: ocp_student_login
+      Gitea login and repositories: gitea_login_and_repositories
+      CTFd student login: ctfd_student_login
+      CTFd admin login: ctfd_admin_login
+      Dev Spaces route: devspaces_route
+      Keycloak realm: keycloak_realm
+      EC2 SSH identity and sudo: ssh_identity_and_sudo
+    health_summary_runtime_checks:
+      Control-machine connectivity: control
+      AAP execution connectivity: aap
+      AAP to managed-node Ansible ping: aap_ssh
+      Managed-node connectivity: managed_node
+    health_summary: |-
+      STUDENT HEALTH CHECK SUMMARY
+      Student: {{ guid }}
+      | Check                                   | Result  |
+      |-----------------------------------------|---------|
+      {% set counts = namespace(passed=0, failed=0, blocked=0) %}
+      {% for labels, results in [(health_summary_service_checks, health_report.services.checks | default({})), (health_summary_runtime_checks, health_report.runtime.sources | default({}))] %}
+      {% for label, key in labels.items() %}
+      {% set status = results.get(key, {}).get('status', 'failed') %}
+      {% if status == 'passed' %}
+      {% set counts.passed = counts.passed + 1 %}
+      {% elif status == 'blocked' %}
+      {% set counts.blocked = counts.blocked + 1 %}
+      {% else %}
+      {% set status = 'failed' %}
+      {% set counts.failed = counts.failed + 1 %}
+      {% endif %}
+      | {{ '%-39s' | format(label) }} | {{ '%-7s' | format(status | upper) }} |
+      {% endfor %}
+      {% endfor %}
+      Total: {{ counts.passed + counts.failed + counts.blocked }} | Passed: {{ counts.passed }} | Failed: {{ counts.failed }} | Blocked: {{ counts.blocked }}
+      Overall: {{ 'PASS' if health_report.services.status == 'passed' and health_report.runtime.status == 'passed' else 'FAIL' }}
+      Evidence: {{ health_evidence.dest | default('not saved') }}
   tasks:
-    - name: Require service and fresh runtime checks to pass
-      ansible.builtin.assert:
-        that:
-          - health_report.services.status == 'passed'
-          - health_report.runtime.status == 'passed'
-        fail_msg: "Student {{ guid }} failed health checks; see the retained health.json evidence."
+    - name: Enforce health and always print the final summary
       when: not ansible_check_mode
+      block:
+        - name: Require service and fresh runtime checks to pass
+          ansible.builtin.assert:
+            that:
+              - health_report.services.status == 'passed'
+              - health_report.runtime.status == 'passed'
+            fail_msg: "Student {{ guid }} failed health checks; see the retained health.json evidence."
+      always:
+        - name: Final student health-check summary
+          ansible.builtin.debug:
+            msg: "{{ health_summary.splitlines() | reject('equalto', '') | list }}"
+
+    - name: Report that check mode does not establish student health
+      ansible.builtin.debug:
+        msg: "STUDENT HEALTH CHECK SUMMARY: SKIPPED (check mode); no probes were run."
+      when: ansible_check_mode

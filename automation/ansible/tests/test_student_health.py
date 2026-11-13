@@ -184,12 +184,15 @@ if m.check_mode: m.exit_json(changed=False, skipped=True)
 d = m.params['data']
 assert d['aap_username'] == 'instructor-' + d['guid']
 assert d['bastion_ssh_password'] == 'synthetic-secret'
-m.exit_json(changed=False, report=dict(id='sample', status='failed' if d['guid']=='one' else 'passed'))
+status = 'failed' if d['guid']=='one' else 'passed'
+checks = {key: dict(status='passed') for key in ('ocp_student_login', 'gitea_login_and_repositories', 'ctfd_student_login', 'ctfd_admin_login', 'devspaces_route', 'keycloak_realm', 'ssh_identity_and_sudo')}
+checks['ocp_student_login']['status'] = status
+m.exit_json(changed=False, report=dict(id='sample', status=status, checks=checks))
 ''')
         (library / 'aia_connectivity.py').write_text('''from ansible.module_utils.basic import AnsibleModule
 m = AnsibleModule(argument_spec=dict(url={}, username={}, password=dict(no_log=True), guid={}, node=dict(type='dict'), endpoints=dict(type='list'), managed_web_url={}, validate_certs=dict(type='bool'), connect_timeout=dict(type='float'), job_timeout=dict(type='int')), supports_check_mode=True)
 if m.check_mode: m.exit_json(changed=False, skipped=True)
-m.exit_json(changed=False, report=dict(id='runtime', status='passed'))
+m.exit_json(changed=False, report=dict(id='runtime', status='passed', sources={key: dict(status='passed') for key in ('control', 'aap', 'aap_ssh', 'managed_node')}))
 ''')
         self.env = dict(os.environ, ANSIBLE_VAULT_PASSWORD_FILE=str(self.root / 'vault'),
                         ANSIBLE_NOCOLOR='1', ANSIBLE_LOCALHOST_WARNING='False')
@@ -208,6 +211,21 @@ m.exit_json(changed=False, report=dict(id='runtime', status='passed'))
         result = self.run_play('-i', 'localhost,', '-e', '@' + str(path))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(len(list(self.reports.glob('*.health.json'))), 1)
+        self.assertIn('Total: 11 | Passed: 11 | Failed: 0 | Blocked: 0', result.stdout)
+        self.assertIn('Overall: PASS', result.stdout)
+        self.assertIn('OpenShift student login', result.stdout)
+        self.assertNotIn('synthetic-secret', result.stdout + result.stderr)
+
+    def test_final_summary_prints_after_failed_health_gate(self):
+        data = fields('one')
+        path = self.root / 'student.json'
+        path.write_text(json.dumps(data))
+        result = self.run_play('-i', 'localhost,', '-e', '@' + str(path))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Total: 11 | Passed: 10 | Failed: 1 | Blocked: 0', result.stdout)
+        self.assertIn('Overall: FAIL', result.stdout)
+        self.assertGreater(result.stdout.index('TASK [Final student health-check summary]'),
+                           result.stdout.index('TASK [Require service and fresh runtime checks to pass]'))
         self.assertNotIn('synthetic-secret', result.stdout + result.stderr)
 
     def test_showroom_loads_only_its_mounted_student_data(self):
@@ -282,6 +300,8 @@ m.exit_json(changed=False, report=dict(id='runtime', status='passed'))
         result = self.run_play('-i', 'localhost,', '-e', '@' + str(path), '--check')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(self.reports.exists())
+        self.assertIn('SKIPPED (check mode); no probes were run.', result.stdout)
+        self.assertNotIn('Overall: PASS', result.stdout)
 
 
 if __name__ == '__main__':

@@ -113,6 +113,11 @@ targets fail rather than establish health.
   Apache; shared-service 503 fails. `verifier_url: not.available.com` is not a
   real service and is not checked.
 
+Every completed probe run ends with a per-check summary table, pass/fail/blocked
+totals, overall PASS/FAIL, and the evidence path. The summary is printed even
+when the final health assertion fails. Check mode prints an explicit SKIPPED
+summary instead of claiming health.
+
 A nonzero exit means at least one required check failed. Each run writes
 `/tmp/aia-healthcheck/<guid>.<sample-id>.health.json` (or under `$TMPDIR`)
 with mode `0600` in a `0700` directory. This writable location also works when
