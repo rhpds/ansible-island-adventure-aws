@@ -52,7 +52,7 @@ def ctfd_login(url, username, password, admin, verify):
         request(session, 'POST', url + '/login', codes=(302, 303),
                 data=dict(name=username, password=password, nonce=parser.nonce))
         # A failed login can redirect too; require a protected page, not just 302.
-        request(session, 'GET', url + ('/admin' if admin else '/settings'))
+        request(session, 'GET', url + ('/admin/' if admin else '/settings'))
         result = request(session, 'GET', url + '/api/v1/challenges').json()
         if result.get('success') is not True or not isinstance(result.get('data'), list):
             raise HealthError('CTFd authenticated challenge API failed')

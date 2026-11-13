@@ -16,6 +16,7 @@
   connection: local
   gather_facts: false
   vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
     # The runtime runner mounts its content read-only; use a private writable temp directory.
     aia_healthcheck_report_dir: "{{ lookup('ansible.builtin.env', 'TMPDIR') | default('/tmp', true) }}/aia-healthcheck"
     # Flat catalog provision fields work directly with -e @/private/student.yml.
@@ -60,6 +61,8 @@
         data: "{{ health_data }}"
         validate_certs: "{{ aia_validate_certs | default(true) }}"
       register: health_services
+      environment:
+        PYTHONPATH: "{{ hostvars['localhost'].aia_healthcheck_pythonpath | default(lookup('ansible.builtin.env', 'PYTHONPATH')) }}"
       failed_when: false
       no_log: true
 
@@ -84,6 +87,8 @@
         connect_timeout: "{{ aia_readiness_connect_timeout | default(3) }}"
         job_timeout: "{{ aia_readiness_job_timeout | default(300) }}"
       register: health_runtime
+      environment:
+        PYTHONPATH: "{{ hostvars['localhost'].aia_healthcheck_pythonpath | default(lookup('ansible.builtin.env', 'PYTHONPATH')) }}"
       failed_when: false
       no_log: true
 

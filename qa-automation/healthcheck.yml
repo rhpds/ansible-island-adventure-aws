@@ -5,6 +5,55 @@
   connection: local
   gather_facts: false
   tasks:
+    - name: Check health-probe Python dependencies in the runner interpreter
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - -c
+          - import requests, yaml, paramiko
+      register: health_dependencies
+      changed_when: false
+      failed_when: false
+      when: not ansible_check_mode
+
+    - name: Prepare isolated dependencies when the runner image lacks them
+      when:
+        - not ansible_check_mode
+        - health_dependencies.rc | default(0) != 0
+      block:
+        - name: Allocate a private temporary Python dependency directory
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: aia-healthcheck-python-
+          register: health_python_directory
+
+        - name: Install health dependencies without changing system Python
+          ansible.builtin.command:
+            argv:
+              - "{{ ansible_playbook_python }}"
+              - -m
+              - pip
+              - install
+              - --disable-pip-version-check
+              - --no-warn-script-location
+              - --target
+              - "{{ health_python_directory.path }}"
+              - -r
+              - "{{ playbook_dir }}/requirements.txt"
+          register: health_dependency_install
+          failed_when: false
+          no_log: true
+
+        - name: Require the isolated health dependency installation to succeed
+          ansible.builtin.assert:
+            that:
+              - health_dependency_install.rc | default(1) == 0
+            fail_msg: The runner needs requests, PyYAML and paramiko; isolated pip installation failed.
+
+        - name: Use the isolated dependencies for subsequent student probes
+          ansible.builtin.set_fact:
+            aia_healthcheck_pythonpath: "{{ health_python_directory.path }}{{ ':' ~ lookup('ansible.builtin.env', 'PYTHONPATH') if lookup('ansible.builtin.env', 'PYTHONPATH') else '' }}"
+
     - name: Look for the Showroom user-data mount
       ansible.builtin.stat:
         path: "{{ aia_healthcheck_user_data_file | default('/user_data/user_data.yml') }}"

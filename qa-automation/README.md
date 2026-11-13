@@ -13,9 +13,14 @@ provisioning readiness ConfigMap or trust a previously published `passed` value.
 
 ## Requirements
 
-Run from the repository root with Ansible Core, `requests`, `PyYAML` and
-`paramiko` installed in the Python interpreter used by Ansible. Use the same
-virtual environment for inventory export and playbook execution. No event vault
+Run from the repository root with Ansible Core and Python/pip available.
+The QA entry point checks for `requests`, `PyYAML` and `paramiko` in the runner
+interpreter. If missing, it installs `qa-automation/requirements.txt` into a
+private temporary directory and uses that directory only for the probe modules;
+system Python is not modified. This fallback requires access to the configured
+Python package index. You can preinstall these packages in the runner image to
+avoid the runtime install. Use the same virtual environment for inventory export
+and playbook execution. No event vault
 or leader admin token is needed for these student-level probes. If the root
 `ansible.cfg` references an unavailable vault file, override it with
 `ANSIBLE_VAULT_PASSWORD_FILE=/path/to/your/vault-password-file` (the check never
