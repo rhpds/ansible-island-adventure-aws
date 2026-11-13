@@ -98,8 +98,10 @@ targets fail rather than establish health.
   real service and is not checked.
 
 A nonzero exit means at least one required check failed. Each run writes
-`.aia-healthcheck/<guid>.<sample-id>.health.json` with mode `0600` in a `0700`
-directory. Reports contain check status, timestamps and fresh runtime evidence
+`/tmp/aia-healthcheck/<guid>.<sample-id>.health.json` (or under `$TMPDIR`)
+with mode `0600` in a `0700` directory. This writable location also works when
+the Showroom content mount is read-only. For persistent local evidence, set
+`-e aia_healthcheck_report_dir="$PWD/.aia-healthcheck"`. Reports contain check status, timestamps and fresh runtime evidence
 (including AAP job URLs), not passwords, tokens, cookies or response bodies.
 Input/probe tasks suppress credential logging. Do not enable Ansible debug
 logging or third-party callbacks that dump task variables for private inventories.

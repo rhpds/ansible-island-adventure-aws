@@ -16,7 +16,8 @@
   connection: local
   gather_facts: false
   vars:
-    aia_healthcheck_report_dir: "{{ playbook_dir }}/../../.aia-healthcheck"
+    # The runtime runner mounts its content read-only; use a private writable temp directory.
+    aia_healthcheck_report_dir: "{{ lookup('ansible.builtin.env', 'TMPDIR') | default('/tmp', true) }}/aia-healthcheck"
     # Flat catalog provision fields work directly with -e @/private/student.yml.
     # The existing multi-student exporter uses aia_student/aia_managed_node instead.
     health_data:
