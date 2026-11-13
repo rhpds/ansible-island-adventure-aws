@@ -27,6 +27,27 @@ independent. Inherited utility scripts retain CNV ordering defaults and must
 not be used to order AWS environments. This copy is not registered as
 the original Publishing House project and does not publish workflow updates.
 
+## Antora GitHub Pages preview
+
+Lab guide: https://rhpds.github.io/ansible-island-adventure-aws/
+
+The `Publish Antora GitHub Pages` workflow builds `site.yml` with Antora and
+publishes the generated static `www/` artifact using GitHub Pages Actions.
+It runs on content/build changes to `main`, or can be dispatched manually.
+No Jekyll or separate `gh-pages` source branch is used. Node dependencies are
+version-pinned in `package-lock.json`, and Actions are pinned by commit SHA.
+
+To build the same preview locally:
+
+```sh
+npm ci --ignore-scripts
+npm run docs:build -- --url https://rhpds.github.io/ansible-island-adventure-aws
+```
+
+The preview contains placeholders, not live environment credentials. Its build
+sets example SSH attributes only for the static preview; RHDP Showroom still
+uses `site.yml` directly and receives the actual deployment's user data.
+
 ## Tests
 
 Install Ansible, PyYAML, Jinja2 and the dependencies used by the collection tests,

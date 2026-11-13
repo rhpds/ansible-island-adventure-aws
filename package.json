@@ -1,0 +1,18 @@
+{
+  "name": "ansible-island-adventure-aws-docs",
+  "private": true,
+  "description": "Antora build for the AWS Ansible Island Adventure GitHub Pages preview",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "docs:build": "antora --stacktrace --fetch --redirect-facility static --attribute bastion_public_hostname=BASTION_HOST --attribute bastion_ssh_port=22 --attribute bastion_ssh_user_name=lab-user site.yml"
+  },
+  "devDependencies": {
+    "@andrew-jones/antora-tabs-extension": "1.0.0",
+    "@antora/cli": "3.2.2",
+    "@antora/site-generator": "3.2.2",
+    "@asciidoctor/tabs": "1.0.0-beta.6",
+    "@sntke/antora-mermaid-extension": "0.0.13"
+  }
+}

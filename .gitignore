@@ -1,6 +1,7 @@
 # Antora build output
 www/
 .cache/
+node_modules/
 
 # Environment files (contain credentials)
 *.env
