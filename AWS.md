@@ -56,6 +56,11 @@ student service logins, repository ownership, AWS SSH identity/sudo and fresh
 AAP/managed-node runtime connectivity without applying configuration. See
 [health-check usage and boundaries](qa-automation/README.md).
 
+The student Showroom `/stream/qa/e2e` entry point follows the participant and
+instructor journey using only that student's credentials. It defaults to
+read-only inspection; real exercises and destructive personal-board reset/update
+require explicit GUID confirmations. See [E2E coverage and consent](qa-automation/E2E.md).
+
 ## Validation boundaries
 
 Static/unit checks do not establish cloud readiness. Integration testing must

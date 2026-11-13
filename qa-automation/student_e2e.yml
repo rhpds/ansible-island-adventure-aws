@@ -1,0 +1,113 @@
+---
+- name: Run the Showroom learner journey for exactly one student
+  hosts: "{{ aia_healthcheck_hosts | default('localhost') }}"
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    aia_e2e_mode: inspect
+    aia_e2e_report_dir: "{{ lookup('ansible.builtin.env', 'TMPDIR') | default('/tmp', true) }}/aia-e2e"
+    e2e_summary: |-
+      STUDENT E2E SUMMARY
+      Student: {{ guid }} | Mode: {{ aia_e2e_mode }}
+      | Journey test                                                            | Result  |
+      |-------------------------------------------------------------------------|---------|
+      {% set counts = namespace(passed=0, failed=0, blocked=0, skipped=0) %}
+      {% for check in (e2e_report | default({})).get('checks', {}).values() %}
+      {% set status = check.status %}
+      {% if status == 'passed' %}
+      {% set counts.passed = counts.passed + 1 %}
+      {% elif status == 'blocked' %}
+      {% set counts.blocked = counts.blocked + 1 %}
+      {% elif status == 'skipped' %}
+      {% set counts.skipped = counts.skipped + 1 %}
+      {% else %}
+      {% set counts.failed = counts.failed + 1 %}
+      {% endif %}
+      | {{ '%-71s' | format(check.title) }} | {{ '%-7s' | format(status | upper) }} |
+      {% if check.error is defined %}
+      Reason: {{ check.error }}
+      {% elif check.reason is defined %}
+      Reason: {{ check.reason }}
+      {% endif %}
+      {% endfor %}
+      Passed: {{ counts.passed }} | Failed: {{ counts.failed }} | Blocked: {{ counts.blocked }} | Skipped: {{ counts.skipped }}
+      Overall: {{ (e2e_report | default({})).get('status', 'failed') | upper }}
+      Coverage: {{ (e2e_report | default({})).get('coverage', 'partial') }}
+      {{ (e2e_report | default({})).get('error', '') }}
+      {% if aia_e2e_mode != 'full' %}
+      This is NOT a full learner-journey pass: unexercised stages are explicitly skipped.
+      {% endif %}
+      Evidence: {{ e2e_evidence.dest | default('not saved') }}
+      Browser UI, external game play, facilitation and pipeline discussions remain manual.
+  tasks:
+    - name: Refuse multi-student or unconfirmed modifying E2E runs
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+          - guid is match('^[a-z0-9][a-z0-9-]*$')
+          - aia_e2e_mode in ['inspect', 'exercise', 'full']
+          - aia_e2e_mode == 'inspect' or aia_e2e_confirm_guid | default('') == guid
+          - aia_e2e_mode != 'full' or aia_e2e_reset_confirm_guid | default('') == guid
+        fail_msg: >-
+          E2E targets exactly one student. Exercise/full modes require
+          aia_e2e_confirm_guid=<guid>. Full mode clears ALL progress on this
+          student's board and also requires aia_e2e_reset_confirm_guid=<guid>.
+
+    - name: Execute the scoped journey, retain evidence and always print its summary
+      when: not ansible_check_mode
+      block:
+        - name: Execute E2E with credentials on private stdin, never command-line arguments
+          ansible.builtin.command:
+            argv:
+              - "{{ ansible_playbook_python }}"
+              - "{{ playbook_dir }}/student_e2e.py"
+            stdin: >-
+              {{ {'data': aia_healthcheck_inputs | combine({
+                    'validate_certs': aia_validate_certs | default(true) | bool,
+                    'lab_password': aia_lab_password | default(password | default(common_password | default(gitea_password))),
+                    'managed_node_web_url': managed_node_web_url | default(aia_student.managed_node_web_url | default('')),
+                    'devspaces_url': devspaces_url}),
+                  'mode': aia_e2e_mode,
+                  'confirm_guid': aia_e2e_confirm_guid | default(''),
+                  'reset_confirm_guid': aia_e2e_reset_confirm_guid | default(''),
+                  'job_timeout': aia_e2e_job_timeout | default(600) | int,
+                  'workspace_namespace': aia_e2e_workspace_namespace | default(none)} | to_json }}
+          environment:
+            PYTHONPATH: "{{ hostvars['localhost'].aia_healthcheck_pythonpath | default(lookup('ansible.builtin.env', 'PYTHONPATH')) }}"
+          register: e2e_execution
+          changed_when: aia_e2e_mode != 'inspect'
+          failed_when: false
+          no_log: true
+
+        - name: Read the sanitized E2E report
+          ansible.builtin.set_fact:
+            e2e_report: "{{ (e2e_execution.stdout | from_json) if (e2e_execution.rc | default(1) == 0 and e2e_execution.stdout | default('') | length > 0) else {'status': 'failed', 'coverage': 'partial', 'checks': {}, 'error': 'E2E runner failed before returning safe JSON'} }}"
+
+        - name: Create private E2E evidence directory
+          ansible.builtin.file:
+            path: "{{ aia_e2e_report_dir }}"
+            state: directory
+            mode: '0700'
+
+        - name: Save the student E2E report without credentials or answers
+          ansible.builtin.copy:
+            dest: "{{ aia_e2e_report_dir }}/{{ guid }}.{{ e2e_report.id | default('invalid-input') }}.e2e.json"
+            content: "{{ e2e_report | to_nice_json }}\n"
+            mode: '0600'
+          register: e2e_evidence
+
+        - name: Require all enabled E2E stages to pass
+          ansible.builtin.assert:
+            that:
+              - e2e_report.status == 'passed'
+            fail_msg: Student E2E has failed or blocked stages; inspect the final summary and evidence.
+      always:
+        - name: Final per-student E2E summary
+          ansible.builtin.debug:
+            msg: "{{ e2e_summary.splitlines() | reject('equalto', '') | list }}"
+
+    - name: Explain check-mode E2E coverage
+      ansible.builtin.debug:
+        msg: "STUDENT E2E SUMMARY: SKIPPED (check mode); no journey actions were run."
+      when: ansible_check_mode

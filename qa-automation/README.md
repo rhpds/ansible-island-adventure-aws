@@ -1,5 +1,9 @@
 # AWS student CI health check
 
+For the per-student learner journey at `/stream/qa/e2e`, see
+[E2E modes, coverage, consent and execution](E2E.md). Health checks and E2E are
+separate: the latter verifies challenge content, workspaces and learner workflows.
+
 The **leaderboard CI** owns shared OpenShift, AAP, Gitea, Keycloak and Dev
 Spaces services. Each **student CI** owns its accounts, CTFd and EC2 managed
 node. This playbook checks **exactly one selected student** per run; it does

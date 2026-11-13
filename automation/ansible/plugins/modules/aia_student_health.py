@@ -110,6 +110,9 @@ def openshift_login(domain, username, password, verify=True, api_url=None, ca_fi
                        verify=(ca_file or True) if verify else False).json()
         if user.get('kind') != 'User' or user.get('metadata', {}).get('name') != username:
             raise HealthError('OpenShift authenticated username does not match the student')
+        # Internal callers may reuse this student-only login; health reports ignore
+        # return values and never include this token-bearing connection context.
+        return dict(api_url=api_url, token=token, verify=(ca_file or True) if verify else False)
 
 
 def measure(data, verify=True):

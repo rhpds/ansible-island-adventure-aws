@@ -60,6 +60,11 @@
           - guid is match('^[a-z0-9][a-z0-9-]*$')
         fail_msg: Missing or invalid student GUID.
 
+    - name: Retain private inputs for an optional same-student E2E continuation
+      ansible.builtin.set_fact:
+        aia_healthcheck_inputs: "{{ health_data }}"
+      no_log: true
+
     - name: Verify student services, accounts, repository ownership and AWS SSH identity
       aia_student_health:
         data: "{{ health_data }}"

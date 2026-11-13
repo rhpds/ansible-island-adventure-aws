@@ -251,6 +251,18 @@ m.exit_json(changed=False, report=dict(id='runtime', status='passed', sources={k
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(self.reports.exists())
 
+    def test_isolated_showroom_e2e_entrypoint_check_mode(self):
+        bundle = self.root / 'isolated-qa'
+        shutil.copytree(ROOT / 'qa-automation', bundle)
+        self.playbook = bundle / 'e2e.yml'
+        user_data = self.root / 'user_data.yml'
+        user_data.write_text(json.dumps(fields('two')))
+        result = self.run_play('-i', 'localhost,', '--check', '-e',
+                               'aia_healthcheck_user_data_file=' + str(user_data))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('STUDENT E2E SUMMARY: SKIPPED', result.stdout)
+        self.assertFalse(self.reports.exists())
+
     def exported_inventory(self):
         hosts = {}
         for guid in ('one', 'two'):
