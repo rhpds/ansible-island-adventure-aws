@@ -19,6 +19,13 @@ not a validated concurrent-student capacity guarantee.
 
 ## Student adapter
 
+The AWS AgV item sets the private DNS zone to `<guid>.internal.` (and its
+no-trailing-dot counterpart to `<guid>.internal`), overriding the generic
+cloud-vms-base `example.com` default. The existing AWS provider then sets the
+VM hostname to `rhel.<guid>.internal` during infrastructure setup, before AAP
+inventory provisioning. This preserves the custom workload's GUID-bound
+hostname and passwordless-sudo checks; those checks must not be disabled.
+
 The AWS AgV item supplies aia_aws_managed_node_host/ip/port/web_url from the
 provisioned EC2 inventory. aws_student_access creates a selectorless Service,
 Endpoints and an edge-TLS OpenShift Route to the student's EC2 HTTP port.
