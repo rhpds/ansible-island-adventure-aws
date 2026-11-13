@@ -51,6 +51,25 @@ class ServiceTests(unittest.TestCase):
                 health.ctfd_login('https://ctfd.example.test', 'lab-user', 'bad', False, True)
             self.assertTrue(request.call_args.args[2].endswith('/settings'))
 
+    def test_admin_dashboard_redirect_is_scoped_and_must_finish_successfully(self):
+        for location, allowed in [('/admin/statistics', True), ('/login', False),
+                                  ('https://other.example.test/admin/statistics', False)]:
+            with self.subTest(location=location), patch.object(health, 'request') as request:
+                request.side_effect = [
+                    MagicMock(text='<input name="nonce" value="abc">'),
+                    MagicMock(status_code=302),
+                    MagicMock(status_code=302, headers={'Location': location}),
+                    MagicMock(status_code=200),
+                    MagicMock(json=lambda: {'success': True, 'data': []}),
+                ]
+                if allowed:
+                    health.ctfd_login('https://ctfd.example.test', 'admin', 'synthetic-secret', True, True)
+                    self.assertTrue(request.call_args_list[3].args[2].endswith('/admin/statistics'))
+                else:
+                    with self.assertRaises(health.HealthError):
+                        health.ctfd_login('https://ctfd.example.test', 'admin', 'synthetic-secret', True, True)
+                    self.assertEqual(request.call_count, 3)
+
     def test_all_checks_run_and_exception_details_are_not_leaked(self):
         with patch.object(health, 'request', side_effect=RuntimeError('synthetic-secret')), \
              patch.object(health, 'ctfd_login', side_effect=RuntimeError('synthetic-secret')), \

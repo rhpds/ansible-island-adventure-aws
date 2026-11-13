@@ -4,7 +4,7 @@ import datetime
 from html.parser import HTMLParser
 import re
 import uuid
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from ansible.module_utils.basic import AnsibleModule
 import requests
@@ -52,7 +52,24 @@ def ctfd_login(url, username, password, admin, verify):
         request(session, 'POST', url + '/login', codes=(302, 303),
                 data=dict(name=username, password=password, nonce=parser.nonce))
         # A failed login can redirect too; require a protected page, not just 302.
-        request(session, 'GET', url + ('/admin/' if admin else '/settings'))
+        if admin:
+            # CTFd /admin redirects to its statistics dashboard. Accept only bounded,
+            # same-origin redirects within /admin/, never a redirect back to login.
+            protected_url = url + '/admin'
+            for _ in range(4):
+                protected = request(session, 'GET', protected_url, codes=(200, 302, 303))
+                if protected.status_code == 200:
+                    break
+                destination = urljoin(protected_url, protected.headers.get('Location', ''))
+                parsed = urlsplit(destination)
+                if (parsed.scheme != urlsplit(url).scheme or parsed.netloc != urlsplit(url).netloc
+                        or not parsed.path.startswith('/admin/') or parsed.username or parsed.password):
+                    raise HealthError('CTFd admin did not reach an authenticated dashboard')
+                protected_url = destination
+            else:
+                raise HealthError('CTFd admin dashboard redirect limit exceeded')
+        else:
+            request(session, 'GET', url + '/settings')
         result = request(session, 'GET', url + '/api/v1/challenges').json()
         if result.get('success') is not True or not isinstance(result.get('data'), list):
             raise HealthError('CTFd authenticated challenge API failed')
