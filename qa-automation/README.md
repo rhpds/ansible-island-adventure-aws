@@ -30,6 +30,12 @@ in Git. After publishing a new revision, restart only that student's Showroom
 pod so its content checkout reloads. Pod restart requires permission in the
 student's `showroom-<guid>` namespace.
 
+The runner mounts only `qa-automation/`, not the full repository. Its local
+`student_healthcheck.yml` and `library/` module copies make this directory
+self-contained. When changing the corresponding collection playbook or modules,
+refresh these copies as well; `test_student_health.py` checks byte-for-byte
+consistency and verifies execution from an isolated QA directory.
+
 ## One student: published provision fields
 
 Save the student's fields as a **private YAML mapping** outside Git, for example

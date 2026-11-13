@@ -31,6 +31,13 @@ def fields(guid='one'):
 
 
 class ServiceTests(unittest.TestCase):
+    def test_showroom_bundle_matches_collection_sources(self):
+        self.assertEqual((ROOT / 'qa-automation/student_healthcheck.yml').read_bytes(),
+                         (COLLECTION / 'healthcheck.yml').read_bytes())
+        for name in ('aia_connectivity.py', 'aia_student_health.py'):
+            self.assertEqual((ROOT / 'qa-automation/library' / name).read_bytes(),
+                             (COLLECTION / 'plugins/modules' / name).read_bytes())
+
     def test_nonce_attribute_order(self):
         parser = health.NonceParser()
         parser.feed("<input value='abc' type='hidden' name='nonce'>")
@@ -137,7 +144,7 @@ m.exit_json(changed=False, report=dict(id='runtime', status='passed'))
 
     def test_showroom_loads_only_its_mounted_student_data(self):
         wrapper = (ROOT / 'qa-automation/healthcheck.yml').read_text()
-        wrapper = wrapper.replace('../automation/ansible/healthcheck.yml', 'healthcheck.yml')
+        wrapper = wrapper.replace('student_healthcheck.yml', 'healthcheck.yml')
         self.playbook = self.root / 'showroom.yml'
         self.playbook.write_text(wrapper)
         user_data = self.root / 'user_data.yml'
@@ -146,6 +153,17 @@ m.exit_json(changed=False, report=dict(id='runtime', status='passed'))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue((self.reports / 'two.sample.health.json').exists())
         self.assertNotIn('synthetic-secret', result.stdout + result.stderr)
+
+    def test_isolated_showroom_bundle_needs_no_sibling_directories(self):
+        bundle = self.root / 'isolated-qa'
+        shutil.copytree(ROOT / 'qa-automation', bundle)
+        self.playbook = bundle / 'healthcheck.yml'
+        user_data = self.root / 'user_data.yml'
+        user_data.write_text(json.dumps(fields('two')))
+        result = self.run_play('-i', 'localhost,', '--check', '-e',
+                               'aia_healthcheck_user_data_file=' + str(user_data))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(self.reports.exists())
 
     def exported_inventory(self):
         hosts = {}

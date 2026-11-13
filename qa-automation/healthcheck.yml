@@ -19,4 +19,5 @@
         - health_user_data_mount.stat.exists | default(false)
       no_log: true
 
-- ansible.builtin.import_playbook: ../automation/ansible/healthcheck.yml
+# The Showroom runner mounts only qa-automation/, so all imports stay in this bundle.
+- ansible.builtin.import_playbook: student_healthcheck.yml
