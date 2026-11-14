@@ -156,6 +156,19 @@ class AuthTests(unittest.TestCase):
         self.assertTrue(all(c.kwargs["allow_redirects"] is False for c in calls))
         self.assertEqual(calls[2].args[1], DEFAULT_SERVER + "/auth/session")
 
+    def test_kubernetes_patch_media_types_preserve_body_and_auth(self):
+        for body, content_type in [([{"op": "add", "path": "/spec/concurrency", "value": 0}],
+                                    "application/json-patch+json"),
+                                   ({"spec": {"concurrency": 0}}, "application/merge-patch+json")]:
+            with self.subTest(content_type=content_type):
+                client = self.client([self.response(), self.response(data={"kind": "WorkshopProvision"})])
+                client.authenticate()
+                client.request("PATCH", "/apis/example/v1/resource", body)
+                call = client.http.request.call_args_list[-1]
+                self.assertEqual(call.kwargs["headers"]["Content-Type"], content_type)
+                self.assertEqual(call.kwargs["headers"]["Authentication"], "Bearer " + SESSION["token"])
+                self.assertEqual(call.kwargs["json"], body)
+
     def test_redirect_and_html_stop_for_sso_without_following(self):
         for response in (self.response(302), self.response(content_type="text/html")):
             client = self.client([response])

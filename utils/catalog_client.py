@@ -189,6 +189,9 @@ class CatalogClient:
 
     def _request(self, method, path, body=None):
         headers = {"Accept": "application/json"}
+        if method == "PATCH":
+            headers["Content-Type"] = ("application/json-patch+json" if isinstance(body, list)
+                                       else "application/merge-patch+json")
         if self.session and path != "/auth/session":
             headers["Authentication"] = "Bearer " + self.session["token"]
         try:

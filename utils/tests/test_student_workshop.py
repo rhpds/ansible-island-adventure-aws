@@ -25,6 +25,10 @@ class WorkshopCatalog(FakeCatalog):
         self.resources = {}
         self.lose_kind = None
         self.child_state = "started"
+        self.patches = []
+        self.replace_on_pause = False
+        self.lose_pause_response = False
+        self.reject_pause = False
 
     def request(self, method, path, body=None):
         if method == "GET":
@@ -33,6 +37,17 @@ class WorkshopCatalog(FakeCatalog):
             if path not in self.resources:
                 raise CatalogError("Not found", 404)
             return deepcopy(self.resources[path])
+        if method == "PATCH":
+            self.patches.append(deepcopy(body))
+            resource = self.resources[path]
+            if self.replace_on_pause:
+                resource["metadata"]["uid"] = "replacement"
+            if self.reject_pause or resource["metadata"]["uid"] != body[0]["value"]:
+                raise CatalogError("Pause rejected", 409)
+            resource["spec"]["concurrency"] = body[1]["value"]
+            if self.lose_pause_response:
+                raise CatalogError("Synthetic lost pause response")
+            return deepcopy(resource)
         if method != "POST":
             raise AssertionError("Unexpected mutation: " + method)
         self.posts.append(deepcopy(body))
@@ -134,6 +149,40 @@ class WorkshopTests(unittest.TestCase):
         self.assertEqual(len(self.client.posts), 2)
         self.smoke.assert_not_called()
         self.assertNotEqual(self.deployment.run["phase"], "complete")
+        self.assertTrue(self.deployment.run["workshop"]["paused_on_failure"])
+        provision = next(v for v in self.client.resources.values() if v["kind"] == "WorkshopProvision")
+        self.assertEqual(provision["spec"]["concurrency"], 0)
+        self.assertEqual(provision["spec"]["count"], 2)
+        self.assertEqual(len(self.client.claims), 2)
+        self.assertTrue(all(c["status"]["summary"]["state"] == "provision-failed"
+                            for c in self.client.claims.values()))
+
+    def test_lost_pause_response_is_confirmed_without_replaying_patch(self):
+        self.client.child_state = "provision-failed"
+        self.client.lose_pause_response = True
+        with self.assertRaisesRegex(CatalogError, "workshop provisioning failed"):
+            self.deploy()
+        self.assertTrue(self.deployment.run["workshop"]["paused_on_failure"])
+        self.assertEqual(len(self.client.patches), 1)
+        self.assertEqual(len(self.client.posts), 2)
+
+    def test_replaced_provision_is_not_paused(self):
+        self.client.child_state = "provision-failed"
+        self.client.replace_on_pause = True
+        with self.assertRaisesRegex(CatalogError, "workshop provisioning failed"):
+            self.deploy()
+        provision = next(v for v in self.client.resources.values() if v["kind"] == "WorkshopProvision")
+        self.assertEqual(provision["spec"]["concurrency"], 10)
+        self.assertNotIn("paused_on_failure", self.deployment.run["workshop"])
+        self.assertIn("Could not confirm", self.output.getvalue())
+
+    def test_rejected_pause_preserves_failure_and_does_not_claim_success(self):
+        self.client.child_state = "provision-failed"
+        self.client.reject_pause = True
+        with self.assertRaisesRegex(CatalogError, "workshop provisioning failed"):
+            self.deploy()
+        self.assertNotIn("paused_on_failure", self.deployment.run["workshop"])
+        self.assertIn("WARNING", self.output.getvalue())
 
     def test_pending_children_timeout_without_duplicate_orders(self):
         self.client.child_state = "provisioning"

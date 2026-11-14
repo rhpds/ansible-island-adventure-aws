@@ -120,6 +120,25 @@ def ensure_resource(deployment, plural, body):
     return resource
 
 
+def pause_failed_workshop(deployment):
+    """Stop Babylon replacing failed CIs; existing jobs and resources are retained."""
+    order = deployment.run["workshop"]["orders"]["workshopprovisions"]
+    path = resource_path(order["namespace"], "workshopprovisions", order["name"])
+    patch = [{"op": "test", "path": "/metadata/uid", "value": order["uid"]},
+             {"op": "add", "path": "/spec/concurrency", "value": 0}]
+    try:
+        resource = deployment.client.request("PATCH", path, patch)
+    except CatalogError:
+        # A lost mutation response may still have reached the server. Confirm
+        # the same UID and desired state without blindly repeating the patch.
+        resource = deployment.client.request("GET", path)
+    if (resource.get("metadata", {}).get("uid") != order["uid"]
+            or resource.get("spec", {}).get("concurrency") != 0):
+        raise CatalogError("Could not confirm the original workshop provision is paused")
+    deployment.run["workshop"]["paused_on_failure"] = True
+    deployment.save()
+
+
 def deploy_workshop(deployment, fields):
     client, run = deployment.client, deployment.run
     settings = run["workshop"]
@@ -172,6 +191,12 @@ def deploy_workshop(deployment, fields):
                 failed.append(cm["name"])
         deployment.save()
         if failed:
+            try:
+                pause_failed_workshop(deployment)
+                print("Workshop launches paused after failure; existing CIs are retained.", flush=True)
+            except CatalogError:
+                print("WARNING: Could not confirm the workshop launch pause; inspect its concurrency in RHDP.",
+                      flush=True)
             raise CatalogError("Student workshop provisioning failed: " + ", ".join(failed)
                                + ". Inspect the workshop and private claim exports; no cleanup was requested.")
         progress = f"Student CIs: {len(ready)}/{settings['user_count']} ready ({len(claims)} claims created)"

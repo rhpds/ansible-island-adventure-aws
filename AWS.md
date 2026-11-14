@@ -42,6 +42,13 @@ The default branch is main. The development catalog selects
 RHDPCD-1137-lb1663-aws; publish both refs when updating the initial release.
 Public read access avoids embedding Git credentials in AgV.
 
+The local workshop deployment utility pauses new launches (`spec.concurrency: 0`)
+when it observes a failed student CI. RHDP otherwise starts replacement instances,
+even when failed infrastructure is retained. Already-running jobs continue and
+existing claims remain available for diagnosis. Fix the failure before explicitly
+restoring concurrency or ordering a fresh student workshop. A replacement already
+being created when the failure is observed can still need separate cleanup.
+
 This is a sanitized source snapshot based on upstream commit
 565df07cdfcfeb6211f713fb7348d16adacfb223. Assistant settings, hooks and the
 original Publishing House registration are excluded from publication.
