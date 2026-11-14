@@ -117,6 +117,16 @@ class WorkshopTests(unittest.TestCase):
         self.assertIn("stop", workshop["spec"]["actionSchedule"])
         self.assertIn("end", workshop["spec"]["lifespan"])
 
+    def test_canary_concurrency_preserves_requested_student_count(self):
+        self.deployment.run['workshop']['concurrency'] = 1
+        _, provision = workshop_bodies(catalog(STUDENT, True), SESSION, self.deployment.run,
+                                        self.fields, self.client.server)
+        self.assertEqual(provision['spec']['count'], 2)
+        self.assertEqual(provision['spec']['concurrency'], 1)
+        for value in [0, -1, True]:
+            with self.assertRaises(ValueError):
+                validate_workshop_catalog(catalog(STUDENT, True), 2, value)
+
     def test_two_children_checked_and_resuming_complete_does_not_reorder(self):
         self.deploy()
         self.assertEqual([body["kind"] for body in self.client.posts], ["Workshop", "WorkshopProvision"])

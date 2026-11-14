@@ -374,6 +374,12 @@ class Deployment:
         fields = student_fields(leaderboard)
         # Save only the identity for reuse; credentials are refreshed from the API.
         remember_leaderboard(self.client, self.directory, leaderboard, self.run["catalogs"]["leaderboard"])
+        if self.run.get("organizer_vault_password_file"):
+            from organizer_vault import seed_organizer_vault
+            self.run["organizer_vault_secret"] = seed_organizer_vault(
+                leaderboard, self.run["organizer_vault_password_file"], self.directory)
+            self.save()
+            print("Organizer key handoff ready in the protected leaderboard Secret.", flush=True)
         if self.run.get("workshop"):
             from student_workshop import deploy_workshop
             deploy_workshop(self, fields)
@@ -479,6 +485,9 @@ def parser():
         sub.add_argument("--expected-student-version", help="Require this live CatalogItem resourceVersion")
         sub.add_argument("--workshop", action="store_true", help="Order student CIs through the workshop interface")
         sub.add_argument("--workshop-user-count", type=int, help="Independent student CIs in a workshop (default: 2)")
+        sub.add_argument("--workshop-concurrency", type=int, help="Concurrent student provisions (use 1 for a canary rollout)")
+        sub.add_argument("--organizer-vault-password-file", type=Path,
+                         help="Seed the organizer-only leaderboard Secret before ordering student CIs")
         sub.add_argument("--keep-on-failure", action="store_true", help="Keep infrastructure attached if provisioning fails")
         sub.add_argument("--accept-warnings", action="store_true", required=True,
                          help="Acknowledge the catalog warnings shown by inspect, equivalent to its checkbox")
@@ -555,11 +564,19 @@ def new_run(args, client):
     student_parameter_names(item)
     if args.workshop_user_count is not None and not args.workshop:
         raise ValueError("--workshop-user-count requires --workshop")
+    if args.workshop_concurrency is not None and not args.workshop:
+        raise ValueError("--workshop-concurrency requires --workshop")
     if args.workshop:
         from student_workshop import validate_workshop_catalog
         count = args.workshop_user_count if args.workshop_user_count is not None else 2
-        validate_workshop_catalog(item, count)
-        run["workshop"] = {"user_count": count}
+        concurrency = args.workshop_concurrency if args.workshop_concurrency is not None else 10
+        validate_workshop_catalog(item, count, concurrency)
+        run["workshop"] = {"user_count": count, "concurrency": concurrency}
+    if args.organizer_vault_password_file is not None:
+        from organizer_vault import read_organizer_password
+        path = args.organizer_vault_password_file.expanduser().resolve()
+        read_organizer_password(path)  # Reject missing/empty input before any orders.
+        run["organizer_vault_password_file"] = str(path)
     run["student_source"] = check_content_source(resolve_student_source(item, directory))
     deployment = Deployment(client, directory, run, args.poll, args.timeout)
     deployment.save()

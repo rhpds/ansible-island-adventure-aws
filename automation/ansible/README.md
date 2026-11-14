@@ -313,8 +313,10 @@ The instructor answer vault in each Gitea fork is re-keyed in memory with
 that key and returns existing ciphertext unchanged when it already works. On
 initial setup it uses `aia_instructor_vault_source_password`, defaulting to a
 private file selected by `aia_instructor_vault_password_file` (repository-root
-`.vault-password`). Supply that secret explicitly from RHDP's private mechanism
-when integrating into a CI. Only the existing file's ciphertext is committed,
+`.vault-password`). Native student CIs try their Vault credentials, then the
+organizer-only `aia-automation/aia-event-vault` Secret. The deployment utility's
+`--organizer-vault-password-file` option seeds that Secret before student ordering;
+see [the AWS workflow](../../AWS.md#student-ci-health-check). Only the existing file's ciphertext is committed,
 with its Git SHA as a concurrency guard; student edits/answers are retained.
 No decrypted answer file or workspace password file is written. The organizer's
 source vault and survival-kit challenge vaults retain their original keys.

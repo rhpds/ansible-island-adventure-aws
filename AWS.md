@@ -64,15 +64,41 @@ and synchronizes their answers without replacing existing challenge IDs or solve
 This is part of the student CI; a manual `post_deploy.yml` run is maintenance,
 not a required step for a newly provisioned student.
 
-The organizer key comes from the job's existing Ansible Vault credentials. It is
-the key that unlocks the packaged encrypted event answers, not the generated
-student password. Local runs can use `--vault-password-file /private/organizer-key`.
-The role tests the configured credentials before repository/content changes and
-fails if none match. It never publishes the organizer key in user data. The
-student's instructor vault is encrypted with their provisioned lab password.
-RHDP must attach the matching existing Vault credential; a local `.vault-password`
-file is not copied into the catalog or the execution environment.
-Babylon's runner forwards `governor.spec.vars.vault_credentials` to the Tower
+The organizer key unlocks `roles/student_post_provision/files/flags.vault`, the
+same encrypted event data used by the CNV post-deploy playbook. The CNV workflow
+ran that playbook locally with `--vault-password-file ../../.vault-password`.
+Moving the tasks into a CI also requires delivering that key to the deployer.
+
+The student role first tries the job's Ansible Vault credentials. When those do
+not unlock the event, it reads Secret `aia-automation/aia-event-vault`, key
+`password`, on the leaderboard. That namespace has no instructor RoleBindings;
+instructors retain admin access only to their own lab and CTFd namespaces. The
+organizer key is cleared from working facts on success and failure. The role
+validates the answers before changing personal repositories or challenge content.
+Each instructor's repository vault uses their provisioned lab password.
+
+The deployment utility can seed this Secret from the organizer's private file,
+using the leaderboard's published API token and CA. It stores only the file path
+and Secret identity in private run state. An existing different key is never
+overwritten. To deploy a fresh AWS environment with a serial canary rollout:
+
+```sh
+.venv/bin/python utils/dev-environment.py bootstrap --new-leaderboard \
+  --leaderboard-catalog babylon-catalog-dev/rh1-2027.lb1663-rh1-ans-island-leaderboard-aws.dev \
+  --student-catalog babylon-catalog-dev/rh1-2027.lb1663-rh1-ans-island-student-aws.dev \
+  --organizer-vault-password-file .vault-password \
+  --workshop --workshop-user-count 4 --workshop-concurrency 1 \
+  --keep-on-failure --accept-warnings
+```
+
+Use `new-student --leaderboard-file lb-creds.yaml` with the same AWS catalog and
+key-file options to reuse a started leaderboard. The key handoff happens before
+any student order. For direct RHDP UI ordering, an organizer must first seed the
+same protected Secret or arrange the matching RHDP Vault credential. The student
+CI completes post-provision configuration without a manual post-deploy run.
+Local maintenance playbooks can still use `--vault-password-file`.
+
+Babylon's runner also forwards `governor.spec.vars.vault_credentials` to the Tower
 job's Vault credentials in
 [`resolveVaultCredentials`](https://github.com/rhpds/babylon-runner/blob/4b9e815e7ed0a3f51e278859b0a86b157987f95d/internal/handler/tower_launch.go#L445).
 

@@ -1,4 +1,7 @@
 ---
-# Event decryption uses the existing RHDP job's Ansible Vault credentials.
+# Prefer job Vault credentials; bootstrap can supply the organizer-only fallback.
+aia_event_vault_secret_namespace: aia-automation
+aia_event_vault_secret_name: aia-event-vault
+aia_event_vault_secret_key: password
 aia_lab_password: "{{ common_password }}"
 aia_enable_advanced: false

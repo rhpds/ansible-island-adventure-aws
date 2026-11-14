@@ -21,15 +21,15 @@ ODF uses gp3-backed storage and supplies CephFS RWX for AAP Hub. Student
 managed nodes use EC2 SSH endpoints and an OpenShift HTTPS route for the
 Apache challenge. See [AWS.md](AWS.md) for architecture and validation limits.
 
-The student catalog integration completes event content, repository access and
+With the organizer key handoff configured, the student catalog integration completes event content, repository access and
 the instructor vault during provisioning, then gates handoff on full student
 health. The leaderboard has its own final storage/service gate. See
 [catalog integration and health-check entry points](AWS.md#provisioning-gates-and-the-images-health-checks).
 
 Showroom content is served from this AWS repository on main, using site.yml
 and the local content/ directory. The original CNV content repository remains
-independent. Inherited utility scripts retain CNV ordering defaults and must
-not be used to order AWS environments. This copy is not registered as
+independent. Inherited utility scripts retain CNV ordering defaults; supply both
+AWS catalog overrides shown in [AWS.md](AWS.md#student-ci-health-check). This copy is not registered as
 the original Publishing House project and does not publish workflow updates.
 
 ## Antora GitHub Pages preview

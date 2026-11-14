@@ -17,7 +17,7 @@ from catalog_client import CatalogError, read_json, secure_write
 from dev_environment import AUTO_DETACH_WHEN, BABYLON, RUN_LABEL, build_claim, claim_state, smoke_check, utcnow
 
 
-def validate_workshop_catalog(item, count):
+def validate_workshop_catalog(item, count, concurrency=None):
     spec = item["spec"]
     if spec.get("workshopUiDisabled"):
         raise ValueError("The student catalog disables its workshop interface")
@@ -25,12 +25,16 @@ def validate_workshop_catalog(item, count):
         raise ValueError("This utility supports independent student CI workshops (workshopUserMode: none)")
     if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= spec.get("workshopUiMaxInstances", 30):
         raise ValueError("Workshop user count must be positive and within the catalog workshop limit")
+    if concurrency is not None and (not isinstance(concurrency, int) or isinstance(concurrency, bool)
+                                    or concurrency < 1):
+        raise ValueError("Workshop concurrency must be a positive integer")
 
 
 def workshop_bodies(item, session, run, fields, server):
     """Build the same defaults as the catalog form, without undeclared inputs."""
     count = run["workshop"]["user_count"]
-    validate_workshop_catalog(item, count)
+    concurrency = run["workshop"].get("concurrency", 10)
+    validate_workshop_catalog(item, count, concurrency)
     name = "aia-workshop-" + run["id"]
     base = build_claim(item, session, run["namespace"], name, run["id"], server, fields,
                        run["activity"], run["purpose"], run.get("lifespan"),
@@ -57,7 +61,7 @@ def workshop_bodies(item, session, run, fields, server):
         "metadata": {"name": name, "namespace": run["namespace"],
                      "labels": {**metadata["labels"], BABYLON + "workshop": name}},
         "spec": {"catalogItem": {"name": item["metadata"]["name"], "namespace": item["metadata"]["namespace"]},
-                 "count": count, "concurrency": 10, "startDelay": 30, "workshopName": name,
+                 "count": count, "concurrency": concurrency, "startDelay": 30, "workshopName": name,
                  "parameters": {**parameters, "purpose_activity": run["activity"], "salesforce_items": "[]"}},
     }
     if not run.get("keep_on_failure"):

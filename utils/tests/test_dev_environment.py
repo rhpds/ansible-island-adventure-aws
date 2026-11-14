@@ -386,6 +386,25 @@ class LifecycleTests(unittest.TestCase):
             self.assertEqual(self.client.posts[-1]["spec"]["provider"]["parameterValues"]["openshift_cluster_common_password"], SECRET)
             self.assertNotIn(SECRET, self.output.getvalue())
 
+    def test_organizer_key_handoff_precedes_student_order_without_entering_state(self):
+        key = self.directory / 'organizer-key'
+        key.write_text('synthetic-private-organizer-key')
+        self.deployment.run['organizer_vault_password_file'] = str(key)
+        def seed(*args):
+            self.assertEqual(len(self.client.posts), 1)
+            return {'namespace': 'aia-automation', 'name': 'aia-event-vault', 'uid': 'secret-uid'}
+        with patch('organizer_vault.seed_organizer_vault', side_effect=seed), patch('dev_environment.smoke_check'):
+            self.deployment.execute()
+        self.assertEqual(len(self.client.posts), 2)
+        self.assertNotIn(key.read_text(), self.deployment.path.read_text() + self.output.getvalue())
+
+    def test_failed_organizer_handoff_prevents_student_order(self):
+        self.deployment.run['organizer_vault_password_file'] = '/private/organizer-key'
+        with patch('organizer_vault.seed_organizer_vault', side_effect=CatalogError('key handoff unavailable')):
+            with self.assertRaisesRegex(CatalogError, 'key handoff unavailable'):
+                self.deployment.execute()
+        self.assertEqual(len(self.client.posts), 1)
+
     def test_lost_post_response_is_reconciled_on_resume(self):
         self.deployment.prepare("leaderboard")
         self.client.lose_response = True

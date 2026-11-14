@@ -1,0 +1,43 @@
+---
+- name: Try the RHDP job's existing Ansible Vault credentials
+  ansible.builtin.set_fact:
+    _aia_event_bundle: >-
+      {{ lookup('ansible_island_adventure.automation.vault_flags',
+                role_path ~ '/files/flags.vault',
+                include_source_password=true, errors='ignore') }}
+  no_log: true
+
+- name: Use the organizer-only key handoff when job credentials do not unlock the event
+  when: not (_aia_event_bundle | default({}))
+  block:
+    - name: Read the organizer event key from the selected leaderboard
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ aia_kubeconfig | default(omit) }}"
+        api_version: v1
+        kind: Secret
+        namespace: "{{ aia_event_vault_secret_namespace }}"
+        name: "{{ aia_event_vault_secret_name }}"
+      register: _aia_event_vault_secret
+      no_log: true
+
+    - name: Require a matching job Vault credential or a provisioned organizer key Secret
+      ansible.builtin.assert:
+        that:
+          - _aia_event_vault_secret.resources | length == 1
+          - _aia_event_vault_secret.resources[0].data[aia_event_vault_secret_key] is defined
+          - _aia_event_vault_secret.resources[0].data[aia_event_vault_secret_key] | b64decode | trim | length > 0
+        fail_msg: >-
+          Attach the matching organizer Vault credential, or seed the organizer
+          Secret with --organizer-vault-password-file before ordering student CIs.
+      no_log: true
+
+    - name: Unlock and validate event answers with the protected organizer key
+      ansible.builtin.set_fact:
+        _aia_event_bundle: >-
+          {{ lookup('ansible_island_adventure.automation.vault_flags',
+                    role_path ~ '/files/flags.vault',
+                    password=(
+                      _aia_event_vault_secret.resources[0].data[aia_event_vault_secret_key] | b64decode
+                    ),
+                    include_source_password=true) }}
+      no_log: true

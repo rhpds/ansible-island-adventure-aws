@@ -1,14 +1,6 @@
 ---
 # Called inside instructor_config, after accounts exist and before Showroom reads
 # the published access data. No challenge/score reset is performed on reruns.
-- name: Unlock and validate event answers before configuring the student
-  ansible.builtin.set_fact:
-    _aia_event_bundle: >-
-      {{ lookup('ansible_island_adventure.automation.vault_flags',
-                role_path ~ '/files/flags.vault',
-                include_source_password=true) }}
-  no_log: true
-
 - name: Complete the provisioned AWS student's environment
   vars:
     aia_instructor_vault_source_password: "{{ _aia_event_bundle.source_password }}"
@@ -31,6 +23,9 @@
       devspaces_url: "https://devspaces.{{ openshift_cluster_ingress_domain }}"
       managed_node_web_url: "{{ aia_aws_managed_node_web_url }}"
   block:
+    - name: Unlock event answers before changing repositories or content
+      ansible.builtin.include_tasks: unlock_event.yml
+
     - name: Resolve and validate packaged event content
       ansible.builtin.include_tasks: prepare_event.yml
 
@@ -81,6 +76,7 @@
     - name: Clear organizer key and resolved answers before inventory export
       ansible.builtin.set_fact:
         _aia_event_bundle: {}
+        _aia_event_vault_secret: {}
         ctfd_flags: {}
         aia_event_challenges: []
         _aia_event_definitions: {}
