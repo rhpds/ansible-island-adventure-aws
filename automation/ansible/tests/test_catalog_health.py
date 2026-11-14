@@ -3,6 +3,10 @@ import copy
 import importlib.util
 import json
 import secrets
+import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -119,3 +123,23 @@ class LeaderboardHealthTests(unittest.TestCase):
         self.http.get.return_value.text = 'synthetic-http-body'
         result = json.dumps(self.evaluate())
         self.assertNotIn('synthetic-credential', result); self.assertNotIn('synthetic-http-body', result)
+
+    @unittest.skipUnless(shutil.which('ansible-playbook'), 'ansible-playbook required')
+    def test_destroy_skips_health_without_cluster_credentials_or_queries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / 'ansible.cfg'
+            config.write_text('[defaults]\nstdout_callback=default\n')
+            play = root / 'destroy.yml'
+            play.write_text(yaml.safe_dump([{
+                'hosts': 'localhost', 'connection': 'local', 'gather_facts': False,
+                'vars': {'ACTION': 'destroy', 'ansible_python_interpreter': sys.executable},
+                'roles': ['leaderboard_health'],
+            }]))
+            result = subprocess.run(['ansible-playbook', '-i', 'localhost,', str(play)],
+                                    env=dict(os.environ, ANSIBLE_CONFIG=str(config),
+                                             ANSIBLE_ROLES_PATH=str(ROOT / 'roles')),
+                                    capture_output=True, text=True, timeout=20)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('skipping: [localhost]', result.stdout)
+            self.assertNotIn('Read core leaderboard readiness objects', result.stdout)
