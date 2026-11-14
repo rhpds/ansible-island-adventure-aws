@@ -2,8 +2,11 @@
 
 import importlib.util
 from pathlib import Path
+import secrets
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+
+import requests
 
 
 SOURCE = Path(__file__).resolve().parents[1] / "library/aia_ctfd_flags.py"
@@ -49,6 +52,18 @@ class FlagSyncTests(unittest.TestCase):
         result = flags.sync_flags(http, "https://ctfd.example.test", [{"name": "Example", "flags": [{"content": "new"}]}], check_mode=True)
         self.assertEqual(result, {"changed": True, "planned_updates": 1, "updated": 0})
         self.assertTrue(all(call.args[0] == "GET" for call in http.request.call_args_list))
+
+    def test_transport_failure_reports_class_without_sensitive_response(self):
+        synthetic_key = secrets.token_urlsafe(12)
+        module = Mock(params={'url': 'https://ctfd.example.test', 'username': 'admin',
+                              'password': synthetic_key, 'challenges': [], 'validate_certs': True})
+        with patch.object(flags, 'AnsibleModule', return_value=module), \
+                patch.object(flags, 'authenticate', side_effect=requests.ConnectionError('synthetic-sensitive-response')):
+            flags.main()
+        message = module.fail_json.call_args.kwargs['msg']
+        self.assertIn('ConnectionError', message)
+        self.assertNotIn('synthetic-sensitive-response', message)
+        self.assertNotIn(synthetic_key, message)
 
 
 if __name__ == "__main__":

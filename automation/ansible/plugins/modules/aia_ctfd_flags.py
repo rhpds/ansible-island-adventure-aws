@@ -100,7 +100,8 @@ def main():
             result = sync_flags(http, url, module.params["challenges"], module.check_mode)
         module.exit_json(**result)
     except (SyncError, requests.RequestException, KeyError, TypeError, ValueError) as error:
-        message = str(error) if isinstance(error, SyncError) else "CTFd flag synchronization failed; response contents suppressed"
+        message = str(error) if isinstance(error, SyncError) else (
+            f"CTFd flag synchronization failed ({type(error).__name__}); response contents suppressed")
         module.fail_json(msg=message)
 
 

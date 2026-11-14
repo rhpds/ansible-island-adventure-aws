@@ -98,6 +98,11 @@ same protected Secret or arrange the matching RHDP Vault credential. The student
 CI completes post-provision configuration without a manual post-deploy run.
 Local maintenance playbooks can still use `--vault-password-file`.
 
+The final CTFd answer synchronization has bounded retries for temporary API
+failures. It preserves challenge IDs and scores; a persistent failure still
+blocks successful provisioning. Unexpected failures report their exception
+class without including response contents or answers.
+
 Babylon's runner also forwards `governor.spec.vars.vault_credentials` to the Tower
 job's Vault credentials in
 [`resolveVaultCredentials`](https://github.com/rhpds/babylon-runner/blob/4b9e815e7ed0a3f51e278859b0a86b157987f95d/internal/handler/tower_launch.go#L445).

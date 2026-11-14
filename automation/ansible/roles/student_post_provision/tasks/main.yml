@@ -54,6 +54,10 @@
         password: "{{ ctfd_admin_password }}"
         challenges: "{{ aia_event_challenges }}"
         validate_certs: "{{ aia_validate_certs | default(true) }}"
+      register: _aia_flag_sync
+      retries: 3
+      delay: 5
+      until: _aia_flag_sync is succeeded
       no_log: true
 
     - name: Publish completed student content without exposing organizer answers or key
@@ -77,6 +81,7 @@
       ansible.builtin.set_fact:
         _aia_event_bundle: {}
         _aia_event_vault_secret: {}
+        _aia_flag_sync: {}
         ctfd_flags: {}
         aia_event_challenges: []
         _aia_event_definitions: {}

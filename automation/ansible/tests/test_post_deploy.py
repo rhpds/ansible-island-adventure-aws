@@ -39,13 +39,21 @@ class PostDeployTests(unittest.TestCase):
         shutil.copytree(COLLECTION / "roles/validate_connectivity", self.collection / "roles/validate_connectivity")
         library = self.collection / "library"
         library.mkdir()
-        (library / "aia_ctfd_flags.py").write_text('''from ansible.module_utils.basic import AnsibleModule
+        (library / "aia_ctfd_flags.py").write_text('''import hashlib, os
+from pathlib import Path
+from ansible.module_utils.basic import AnsibleModule
 module = AnsibleModule(argument_spec={
     'url': {'type': 'str'}, 'username': {'type': 'str'},
     'password': {'type': 'str', 'no_log': True},
     'challenges': {'type': 'list', 'elements': 'dict', 'no_log': True},
     'validate_certs': {'type': 'bool'},
 })
+marker = os.environ.get('AIA_TEST_CTFD_TRANSIENT_FAILURE_MARKER')
+if marker:
+ path = Path(marker + hashlib.sha256(module.params['url'].encode()).hexdigest())
+ if not path.exists():
+  path.write_text('first request failed')
+  module.fail_json(msg='Synthetic transient CTFd API failure')
 module.exit_json(changed=False, updated=0)
 ''')
         shutil.copytree(COLLECTION / "filter_plugins", self.collection / "filter_plugins")
@@ -354,11 +362,13 @@ module.exit_json(changed=False)
             ],
         }], sort_keys=False))
         key = self.root / 'organizer-key'; key.write_text(self.source_password)
-        env.update(ANSIBLE_COLLECTIONS_PATH=str(self.root / 'collections'), ANSIBLE_VAULT_PASSWORD_FILE=str(key))
+        env.update(ANSIBLE_COLLECTIONS_PATH=str(self.root / 'collections'), ANSIBLE_VAULT_PASSWORD_FILE=str(key),
+                   AIA_TEST_CTFD_TRANSIENT_FAILURE_MARKER=str(self.root / 'ctfd-transient-'))
         command = ['ansible-playbook', '-i', str(self.inventory), str(play)]
         result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=90)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(len(self.guides), 2)
+        self.assertEqual(len(list(self.root.glob('ctfd-transient-*'))), 2)
         self.assertNotIn(self.source_password, result.stdout + result.stderr)
         writes = list(self.writes); vaults = dict(self.student_vaults)
         result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=90)
