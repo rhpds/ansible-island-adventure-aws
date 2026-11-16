@@ -56,6 +56,12 @@ The original CNV repository and workflow are not modified or re-registered.
 
 ## Student CI health check
 
+For automatic organizer-key provisioning on future Leaderboards, see the
+[RHDP maintainer setup guide](docs/rhdp-event-credentials.md). It documents the
+named deployer Vault credential, catalog hook, readiness gate and UI-only
+acceptance checks. The private credential must be configured before enabling
+that catalog integration.
+
 The corresponding AWS catalog update enables `instructor_config_post_provision`. After initial
 account/service bootstrap, `student_post_provision` prepares the personal AAP
 inventory and Machine credential, verifies repository branches, re-keys the

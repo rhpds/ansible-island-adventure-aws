@@ -1,0 +1,11 @@
+---
+# Same contract as student_post_provision and utils/organizer_vault.py.
+aia_event_vault_secret_namespace: aia-automation
+aia_event_vault_secret_name: aia-event-vault
+aia_event_vault_secret_key: password
+aia_event_vault_probe_users:
+  - instructor-aia-vault-probe
+aia_event_vault_probe_groups:
+  - system:authenticated
+  - system:authenticated:oauth
+aia_healthcheck_publish_user_info: true

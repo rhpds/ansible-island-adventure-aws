@@ -1,4 +1,17 @@
 ---
+- name: Measure organizer credential readiness when required by the catalog
+  when:
+    - aia_leaderboard_require_event_credentials | bool
+    - not ansible_check_mode
+  block:
+    - ansible.builtin.include_role:
+        name: ansible_island_adventure.automation.leaderboard_event_credentials
+        tasks_from: verify
+  rescue:
+    - name: Retain failed credential readiness for the aggregate report
+      ansible.builtin.set_fact:
+        aia_event_credentials_status: failed
+
 - name: Read core leaderboard readiness objects without changing applications
   kubernetes.core.k8s_info:
     kubeconfig: "{{ aia_kubeconfig | default(omit) }}"
@@ -34,6 +47,7 @@
     domain: "{{ openshift_cluster_ingress_domain }}"
     minimum_workers: "{{ aia_leaderboard_minimum_workers }}"
     rwx_class: "{{ aia_leaderboard_rwx_class }}"
+    event_credentials_status: "{{ aia_event_credentials_status | default('failed') if aia_leaderboard_require_event_credentials | bool else omit }}"
   vars:
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   register: _aia_leaderboard_health
@@ -59,9 +73,13 @@
     - name: Publish leaderboard health in RHDP user data
       agnosticd.core.agnosticd_user_info:
         msg: "Leaderboard health: {{ _aia_leaderboard_health.report.status }}. Evidence retained in the deployment output archive."
-        data:
-          aia_leaderboard_health_status: "{{ _aia_leaderboard_health.report.status }}"
-          aia_leaderboard_health_id: "{{ _aia_leaderboard_health.report.id }}"
+        data: >-
+          {{ {
+            'aia_leaderboard_health_status': _aia_leaderboard_health.report.status,
+            'aia_leaderboard_health_id': _aia_leaderboard_health.report.id
+          } | combine({
+            'aia_event_credentials_status': aia_event_credentials_status | default('failed')
+          } if aia_leaderboard_require_event_credentials | bool else {}) }}
       when: aia_healthcheck_publish_user_info | bool
 
     - name: Require measured leaderboard readiness

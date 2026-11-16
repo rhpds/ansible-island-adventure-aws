@@ -14,6 +14,7 @@ Catalog workload roles live in this directory:
 - `roles/student_readiness/` — Catalog adapter for managed-node AAP access and connectivity validation
 - `roles/student_post_provision/` — Packaged event content, personal vault re-keying, repository access guide and AAP managed-node configuration
 - `roles/student_health/` — Final student CI gate for actual content, logins, vault usability and runtime paths
+- `roles/leaderboard_event_credentials/` — Create-only organizer key handoff from RHDP job Vault credentials, with cryptographic and instructor-isolation verification
 - `roles/leaderboard_health/` — Final shared AWS cluster, storage, workload and HTTPS gate
 
 The project root also retains `ansible-testing/` playbooks and the

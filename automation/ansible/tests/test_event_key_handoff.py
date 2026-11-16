@@ -132,6 +132,8 @@ m.exit_json(changed=False, resources=json.loads(Path(os.environ['AIA_TEST_SECRET
             name = 'roles/student_post_provision/files/flags.vault'
             self.assertEqual(package.extractfile(name).read(), (ROOT / name).read_bytes())
             self.assertIn('roles/student_post_provision/tasks/unlock_event.yml', package.getnames())
+            self.assertIn('roles/leaderboard_event_credentials/tasks/bootstrap.yml', package.getnames())
+            self.assertIn('plugins/modules/aia_event_secret.py', package.getnames())
             self.assertFalse(any(x.endswith('.vault-password') for x in package.getnames()))
 
 

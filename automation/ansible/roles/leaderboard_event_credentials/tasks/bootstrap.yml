@@ -1,0 +1,80 @@
+---
+- name: Mark bootstrap credentials unverified
+  ansible.builtin.set_fact:
+    aia_event_credentials_status: failed
+
+- name: Provision the organizer-only event key without publishing it
+  block:
+    - name: Require an explicit nonempty kubeconfig when supplied
+      ansible.builtin.assert:
+        that:
+          - aia_kubeconfig is string
+          - aia_kubeconfig | trim | length > 0
+      when: aia_kubeconfig is defined
+
+    - name: Require the job Vault credential to unlock the packaged event before any mutation
+      ansible.builtin.set_fact:
+        _aia_leaderboard_event_bundle: >-
+          {{ lookup('ansible_island_adventure.automation.vault_flags',
+                    role_path ~ '/../student_post_provision/files/flags.vault',
+                    include_source_password=true) }}
+
+    - name: Read the existing organizer Secret
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ aia_kubeconfig | default(omit) }}"
+        api_version: v1
+        kind: Secret
+        namespace: "{{ aia_event_vault_secret_namespace }}"
+        name: "{{ aia_event_vault_secret_name }}"
+      register: _aia_leaderboard_existing_secret
+
+    - name: Refuse to rotate or repair a different existing key implicitly
+      ansible.builtin.assert:
+        that:
+          - _aia_leaderboard_existing_secret.resources | length == 1
+          - >-
+            (_aia_leaderboard_existing_secret.resources[0].data[aia_event_vault_secret_key] |
+             default('') | b64decode | trim) == _aia_leaderboard_event_bundle.source_password
+      when: _aia_leaderboard_existing_secret.resources | length > 0
+
+    - name: Require instructor isolation before creating or handing off a key
+      ansible.builtin.include_tasks: isolation.yml
+
+    - name: Create the organizer namespace after validating the job credential
+      kubernetes.core.k8s:
+        kubeconfig: "{{ aia_kubeconfig | default(omit) }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ aia_event_vault_secret_namespace }}"
+            labels:
+              app.kubernetes.io/part-of: ansible-island-adventure
+
+    # POST-only prevents a concurrent deployment replacing a key after the GET.
+    - name: Create a missing organizer Secret without updating existing Secrets
+      ansible_island_adventure.automation.aia_event_secret:
+        kubeconfig: "{{ aia_kubeconfig | default(omit) }}"
+        name: "{{ aia_event_vault_secret_name }}"
+        namespace: "{{ aia_event_vault_secret_namespace }}"
+        key: "{{ aia_event_vault_secret_key }}"
+        event_password: "{{ _aia_leaderboard_event_bundle.source_password }}"
+
+    - name: Verify stored credentials and instructor isolation
+      ansible.builtin.include_tasks: verify.yml
+
+  rescue:
+    - name: Explain the protected credential bootstrap failure
+      ansible.builtin.fail:
+        msg: >-
+          Organizer credential bootstrap failed. Attach the matching AIA event Vault
+          credential to the leaderboard deployer; check API access and any existing
+          organizer Secret. A different existing key must be investigated explicitly.
+  always:
+    - name: Clear the source key and answers on success and failure
+      ansible.builtin.set_fact:
+        _aia_leaderboard_event_bundle: {}
+        _aia_leaderboard_existing_secret: {}
+  no_log: true
+  diff: false
