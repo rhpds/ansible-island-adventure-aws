@@ -125,13 +125,14 @@ assert kind in ['Namespace','SubjectAccessReview']
 with open(os.environ['AIA_API_TRACE'],'a') as f: f.write(kind+'\\n')
 if kind=='SubjectAccessReview':
  assert d['spec']['resourceAttributes']['namespace']=='aia-automation'
- m.exit_json(changed=False,result={'status':{'allowed':os.environ.get('AIA_ALLOW_INSTRUCTOR')=='true'}})
+ allowed=os.environ.get('AIA_ALLOW_INSTRUCTOR')=='true' or d['spec']['resourceAttributes']['verb']==os.environ.get('AIA_ALLOW_VERB')
+ m.exit_json(changed=False,result={'status':{'allowed':allowed}})
 m.exit_json(changed=False)
 ''')
         self.secret = self.path / 'secret.json'; self.trace = self.path / 'api.log'
         self.config = self.path / 'ansible.cfg'; self.config.write_text('[defaults]\nstdout_callback=default\n')
 
-    def run_role(self, job_key=True, verify=False, allow=False, action='provision', check=False, catch=False, health=False):
+    def run_role(self, job_key=True, verify=False, allow=False, action='provision', check=False, catch=False, health=False, allow_verb=''):
         task = {'ansible.builtin.include_role': {'name': 'ansible_island_adventure.automation.leaderboard_event_credentials'}}
         if verify: task['ansible.builtin.include_role']['tasks_from'] = 'verify'
         if health: task['ansible.builtin.include_role']['name'] = 'ansible_island_adventure.automation.leaderboard_health'
@@ -156,7 +157,7 @@ m.exit_json(changed=False)
         env = {k:v for k,v in os.environ.items() if not k.startswith('ANSIBLE_VAULT_')}
         env.update(ANSIBLE_CONFIG=str(self.config), ANSIBLE_COLLECTIONS_PATH=str(self.path/'collections'),
                    AIA_SECRET_STATE=str(self.secret), AIA_API_TRACE=str(self.trace), AIA_ALLOW_INSTRUCTOR=str(allow).lower(),
-                   AIA_PUBLISHED_DATA=str(self.path/'published.json'))
+                   AIA_PUBLISHED_DATA=str(self.path/'published.json'), AIA_ALLOW_VERB=allow_verb)
         cmd = [str(PLAYBOOK), '-i', 'localhost,', str(play)]
         if job_key: cmd += ['--vault-id','rhdp-event@'+str(self.key)]
         if check: cmd += ['--check','--diff']
@@ -196,6 +197,13 @@ m.exit_json(changed=False)
         code,out=self.run_role(job_key=False,verify=True,catch=True); self.assertEqual(code,0,out)
         self.assertEqual(self.secret.read_bytes(),original)
         self.assertNotIn('Namespace',self.trace.read_text())
+
+    def test_list_or_watch_permission_blocks_bootstrap_before_key_creation(self):
+        for verb in ['list','watch']:
+            code,out=self.run_role(allow_verb=verb,catch=True)
+            self.assertEqual(code,0,out)
+            self.assertFalse(self.secret.exists())
+            self.assertNotIn('Namespace',self.trace.read_text())
 
     def test_destroy_and_check_mode_need_no_vault_or_api(self):
         for args in [{'action':'destroy'}, {'check':True}]:

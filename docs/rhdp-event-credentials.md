@@ -99,6 +99,8 @@ key in an existing Secret fails provisioning.
 The credential check then independently reads the stored Secret, confirms it
 unlocks the packaged event, and submits SubjectAccessReviews requiring denial
 for an instructor identity with the standard authenticated OpenShift groups.
+Reviews cover direct reads plus listing and watching Secrets, both unrestricted
+and restricted to the key's resource name. All must be denied.
 `aia_event_vault_probe_users` can include additional real instructor usernames;
 `aia_event_vault_probe_groups` defines the groups evaluated by those reviews.
 Include any additional instructor groups if the authentication policy changes.
@@ -132,12 +134,20 @@ Vault credentials do not unlock the event; no Student catalog change is needed.
    `aia_health_status: passed`, including real AAP execution and SSH/return-path
    checks. No manual post-deploy playbook should be necessary.
 5. Check a real instructor account after provisioning. As an organizer with an
-   explicit leaderboard kubeconfig, run the following; expect `no` and exit 1:
+   explicit leaderboard kubeconfig, run the following. Expect `no` for all five
+   checks; each denial returns exit 1:
 
    ```sh
-   oc --kubeconfig "$LB_KUBECONFIG" auth can-i get secret/aia-event-vault \
-     --namespace aia-automation --as="instructor-${STUDENT_GUID}" \
-     --as-group=system:authenticated --as-group=system:authenticated:oauth
+   for verb in get list watch; do
+     oc --kubeconfig "$LB_KUBECONFIG" auth can-i "$verb" secret/aia-event-vault \
+       --namespace aia-automation --as="instructor-${STUDENT_GUID}" \
+       --as-group=system:authenticated --as-group=system:authenticated:oauth
+   done
+   for verb in list watch; do
+     oc --kubeconfig "$LB_KUBECONFIG" auth can-i "$verb" secrets \
+       --namespace aia-automation --as="instructor-${STUDENT_GUID}" \
+       --as-group=system:authenticated --as-group=system:authenticated:oauth
+   done
    ```
 
 6. Re-run bootstrap/verification with the same credential: the Secret UID and
