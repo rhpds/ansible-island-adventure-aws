@@ -1,5 +1,9 @@
 # RHDP setup for AIA organizer event credentials
 
+Review links: [AIA implementation PR](https://github.com/rhpds/ansible-island-adventure-aws/pull/1)
+and [AgnosticV catalog PR](https://github.com/rhpds/agnosticv/pull/29067).
+The catalog PR remains a draft until private credential registration is complete.
+
 The AWS Leaderboard catalog item needs to provision the organizer event key so
 subsequent Student items can finish automatically. Previously, the organizer's
 local post-deploy command supplied `.vault-password`; moving those tasks into
