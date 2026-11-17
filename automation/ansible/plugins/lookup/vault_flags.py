@@ -31,7 +31,7 @@ def read_bundle(path, password=None, vault_secrets=None):
             raise ValueError()
         return {'ctfd_flags': flags, 'source_password': secret.bytes.decode()}
     except Exception:
-        raise AnsibleLookupError('Event flags could not be unlocked or validated; attach the matching organizer Ansible Vault credential to the RHDP job') from None
+        raise AnsibleLookupError('Event flags could not be unlocked or validated; check aia_organizer_vault_password from the encrypted AgnosticV include or the organizer credential source') from None
 
 
 class LookupModule(LookupBase):

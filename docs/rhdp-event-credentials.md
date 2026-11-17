@@ -1,145 +1,137 @@
-# RHDP setup for AIA organizer event credentials
+# RHDP encrypted include for AIA organizer credentials
 
 Review links: [AIA implementation PR](https://github.com/rhpds/ansible-island-adventure-aws/pull/1)
 and [AgnosticV catalog PR](https://github.com/rhpds/agnosticv/pull/29067).
-The catalog PR remains a draft until private credential registration is complete.
+The catalog PR remains a draft until maintainers wire the approved encrypted
+include into the Leaderboard workload configuration.
 
-The AWS Leaderboard catalog item needs to provision the organizer event key so
-subsequent Student items can finish automatically. Previously, the organizer's
-local post-deploy command supplied `.vault-password`; moving those tasks into
-RHDP also requires delivering that credential to the deployer.
+## Variable requested from maintainers
 
-The requested maintainer action is to create a named Vault credential on the
-RHDP deployer controllers and enable the catalog hook described below. The key
-itself must be transferred through the approved private channel. It is not a
-catalog form input or a value to add to a GitHub PR.
+Please store the organizer event key under this exact Ansible variable name:
 
-## Responsibilities and deployment flow
+```text
+aia_organizer_vault_password
+```
 
-| Owner | Change |
+Use RHDP's existing approved encrypted AgnosticV include mechanism. The value
+is the organizer key matching `roles/student_post_provision/files/flags.vault`,
+which is the same source key used by the organizer's local `.vault-password`.
+It is separate from the RHDP platform key used to decrypt the include and from
+each instructor's provisioned lab password.
+
+Make the variable available to the **AWS Leaderboard workload deployer job**.
+Defining it there is sufficient: the Leaderboard role provisions the existing
+protected Secret handoff that Student jobs already consume. Supplying the same
+variable directly to Student jobs is also supported when maintainers choose to
+include it there.
+
+The encrypted include path and encryption procedure belong to RHDP maintainers.
+Use an event-scoped include in the approved directory; the public catalog change does not invent a
+new secret file or commit an unencrypted placeholder. The catalog PR must remain
+a draft until the selected include actually supplies this variable to the job.
+
+## Changes and ownership
+
+| Owner | Action |
 | --- | --- |
-| AIA repository maintainers | Ship `leaderboard_event_credentials`, its create-only Secret module, and the credential health gate. |
-| RHDP platform maintainers | Register the organizer Vault credential and grant the deployer identity permission to use it on every eligible controller. |
-| AgnosticV maintainer | Merge the AWS Leaderboard catalog hook after the collection revision and private credential are available. |
+| RHDP maintainer | Store `aia_organizer_vault_password` in the approved encrypted include and include it in the AWS Leaderboard workload configuration. Keep it encrypted through catalog rendering and decrypt only within the deployer using the existing mechanism. |
+| AIA repository maintainers | Ship the variable-aware bootstrap and Student unlock paths, create-only Secret handling, and readiness checks. |
+| AgnosticV maintainer | Review the pinned collection revision and workload ordering, confirm the private include is connected, then enable the catalog PR. |
 
-The flow is RHDP Vault credential → Leaderboard deployer → protected OpenShift
-Secret → Student deployer → event content and personal instructor vaults.
-Instructors continue to use their individual provisioned lab passwords.
+No new named credential on the event controllers is required. Existing RHDP
+platform credentials decrypt the approved include through the platform's normal
+mechanism.
 
-## Register the private credential before enabling the catalog hook
+Do not expose the variable through catalog parameters, form defaults, plaintext
+public configuration, `agnosticd_user_info`, published user data, Showroom,
+repository access guides, or exported student inventory. Transfer the source key
+through the approved private channel rather than a GitHub comment or PR body.
 
-On every controller eligible to run the AWS Leaderboard workload job, create:
+## Automation behavior
 
-| Setting | Value |
-| --- | --- |
-| Credential name | `aia-event` |
-| Credential type | Ansible Vault / Vault |
-| Organization | `RHPDS`, consistent with the event deployer configuration |
-| Vault password | The organizer-supplied key matching the packaged `roles/student_post_provision/files/flags.vault` |
-| Vault identifier | Leave blank for the packaged Ansible Vault 1.1 file's default identity. Avoid a second conflicting default-identity credential on the same job. |
-| Prompt on launch | Disabled; unattended provisioning must receive the credential. |
-| Access | The RHDP identity launching jobs must have permission to use the credential. |
+The Leaderboard bootstrap role reads `aia_organizer_vault_password` and uses it to
+unlock the packaged encrypted event before changing Kubernetes resources. The
+value must be a nonempty string, including a value decrypted from an inline
+Ansible Vault variable. An explicitly supplied empty, invalid or incorrect value
+fails provisioning; it does not silently fall back to a different credential.
 
-The current event controller configuration selects randomly between
-`event0.apps.ocpv-infra01.dal12.infra.demo.redhat.com` and
-`event1.apps.ocpv-infra02.wdc07.infra.demo.redhat.com`. Confirm the active
-scheduler/controller configuration and provision the credential on every
-eligible backend, including future additions. Keep its name unique among the
-credentials visible to the launching identity; the runner resolves it by name.
+After validating the key, bootstrap checks instructor authorization, then creates
+Namespace `aia-automation` and Secret `aia-event-vault`, key `password`. Secret
+creation uses POST-only handling. Matching existing keys are accepted; a
+malformed or different existing key fails rather than being overwritten,
+including during concurrent creation.
 
-These are RHDP's infrastructure deployer controllers. The AAP instance installed
-inside the Leaderboard cluster is the students' lab application and is not the
-place to register this platform credential.
+The existing Student role resolves its key in this order:
 
-If an existing private RHDP mechanism supplies the matching Vault credential to
-these jobs already, maintainers may use that mechanism instead. Confirm an actual
-Leaderboard job receives it; credentials attached to a parent/base-cluster job
-do not automatically establish the handoff to Student jobs.
+1. `aia_organizer_vault_password`, when the approved include supplies it directly.
+2. Existing job Vault credentials, when the organizer variable is absent.
+3. The protected Leaderboard Secret, when the variable is absent and existing
+   job credentials do not unlock the event.
 
-## Apply the catalog integration
+Legacy local maintenance can still use its existing Vault password file or the
+local Secret-seeding helper. Those are not required for fresh deployments once
+the maintainer include and catalog hook are enabled.
 
-The integration is confined to
-`rh1-2027/lb1663-rh1-ans-island-leaderboard-aws/common.yaml` in `rhpds/agnosticv`:
+All key-bearing tasks suppress logs and diffs. Derived decrypted answers and
+key facts are cleared on success and failure. The input variable remains owned
+by RHDP's secret-delivery mechanism and is never copied into published user
+data. Instructors continue using their individual lab passwords.
+
+## Catalog integration
+
+The catalog PR updates the AWS Leaderboard and Student collection revisions in
+`rh1-2027/lb1663-rh1-ans-island-{leaderboard,student}-aws/common.yaml` in
+`rhpds/agnosticv`. Maintainers must connect their selected encrypted include to
+the Leaderboard workload job. The Leaderboard hook enables:
 
 ```yaml
-__meta__:
-  deployer:
-    credentials:
-      - aia-event
-
 aia_leaderboard_require_event_credentials: true
 
 workloads:
-  # Existing workloads remain in their existing order.
+  # Retain the existing workloads before these entries.
   - ansible_island_adventure.automation.keycloak_ocp_logout_fix
   - ansible_island_adventure.automation.leaderboard_event_credentials
   - ansible_island_adventure.automation.leaderboard_health
 ```
 
-Merge these entries into the existing mappings/lists. Retain any other required
-deployer credentials. The catalog PR pins `aia_aws_revision` to the reviewed
-collection commit containing these roles so the new hook cannot run against an
-older collection. Update that pin deliberately for future collection releases.
-No change to the AIA repository's top-level `catalog-info.yaml` is needed.
+Both items pin `aia_aws_revision` to the reviewed variable-aware implementation
+commit. Update the pins deliberately for future automation releases. Student
+jobs support both direct variable use and the protected Secret handoff; they do
+not need a matching include when only the Leaderboard receives the variable.
+No change to the AIA repository's
+top-level `catalog-info.yaml` is needed.
 
-The implementation uses the existing runner path:
-[named deployer credentials](https://github.com/rhpds/babylon-runner/blob/4b9e815e7ed0a3f51e278859b0a86b157987f95d/internal/handler/tower_launch.go#L400)
-are looked up and associated with job templates in
-[the Tower client](https://github.com/rhpds/babylon-runner/blob/4b9e815e7ed0a3f51e278859b0a86b157987f95d/internal/clients/tower.go#L530).
-Maintainers should confirm their deployed runner/governor supports that setting
-before enabling the hook. No shared runner or core workload change is required
-by this implementation.
+## Readiness and acceptance checks
 
-## Bootstrap and health behavior
+The fifteenth Leaderboard health check, `event_credentials`, independently
+confirms that the stored key decrypts the packaged event. SubjectAccessReviews
+must deny an instructor identity direct reads plus listing and watching Secrets,
+both unrestricted and restricted to the key's resource name. Authorization
+review errors fail the check. The existing fourteen service/storage checks
+remain required.
 
-The bootstrap role first unlocks and validates the packaged event using the
-job's Vault credentials. It checks instructor authorization before writing a
-key, then creates Namespace `aia-automation` and Secret
-`aia-event-vault`, key `password`. Its Secret module uses create-only API calls;
-it never patches or replaces an existing Secret, including during concurrent
-creation. A matching existing key is accepted; a missing, malformed or different
-key in an existing Secret fails provisioning.
-
-The credential check then independently reads the stored Secret, confirms it
-unlocks the packaged event, and submits SubjectAccessReviews requiring denial
-for an instructor identity with the standard authenticated OpenShift groups.
-Reviews cover direct reads plus listing and watching Secrets, both unrestricted
-and restricted to the key's resource name. All must be denied.
-`aia_event_vault_probe_users` can include additional real instructor usernames;
+`aia_event_vault_probe_users` accepts additional real instructor usernames;
 `aia_event_vault_probe_groups` defines the groups evaluated by those reviews.
 Include any additional instructor groups if the authentication policy changes.
-An authorization evaluation error fails verification.
+Only measured status (`aia_event_credentials_status: passed` or `failed`) is
+published alongside aggregate health. Bootstrap skips destruction and check
+mode; stop/start does not rotate the key.
 
-The catalog enables a fifteenth leaderboard health check, `event_credentials`.
-The existing fourteen storage, workload and service checks remain in place.
-RHDP user data publishes only the measured credential status,
-`aia_event_credentials_status: passed` or `failed`, alongside aggregate health.
-The key, its encoded form and decrypted
-answers are hidden from task output and diffs, cleared from working facts, and
-excluded from published user data. The namespace receives no instructor
-RoleBindings from this role.
-
-Bootstrap is skipped during destruction and check mode. Lifecycle stop/start
-does not rotate the key. Deleting the Leaderboard cluster removes its Secret.
-The Student role already consumes this Secret automatically when its own job
-Vault credentials do not unlock the event; no Student catalog change is needed.
-
-## Acceptance checks
-
-1. Make the collection revision available and register the private credential
-   before merging/enabling the catalog hook.
-2. Order a fresh AWS Leaderboard through the ordinary RHDP UI. Do not use the
-   local `--organizer-vault-password-file` helper or seed a Secret manually.
-3. Require native job success, `aia_event_credentials_status: passed`, and
-   `aia_leaderboard_health_status: passed`. The retained health report must have
-   `event_credentials.status: passed` as well as the existing checks.
-4. Order at least two Student items against that leaderboard. Each must publish
+1. Confirm the include uses the existing approved encryption mechanism and its
+   variable reaches the Leaderboard workload job. Keep the organizer key
+   encrypted in stored catalog configuration; do not materialize it as a public
+   parameter to test delivery.
+2. Order a fresh AWS Leaderboard through RHDP's ordinary UI. Do not seed a Secret
+   manually or use `--organizer-vault-password-file`.
+3. Require native success, `aia_event_credentials_status: passed`, and
+   `aia_leaderboard_health_status: passed`, including the fifteenth check.
+4. Order at least two Students. Each must publish
    `aia_post_provision_status: complete`, `aia_event_challenge_count: 25`, and
-   `aia_health_status: passed`, including real AAP execution and SSH/return-path
-   checks. No manual post-deploy playbook should be necessary.
-5. Check a real instructor account after provisioning. As an organizer with an
-   explicit leaderboard kubeconfig, run the following. Expect `no` for all five
-   checks; each denial returns exit 1:
+   `aia_health_status: passed`, including actual AAP execution and VM connectivity.
+   No manual post-deploy playbook should be required.
+5. Verify real instructor access after provisioning. As an organizer with an
+   explicit Leaderboard kubeconfig, expect `no` for all five checks below; each
+   denial returns exit 1:
 
    ```sh
    for verb in get list watch; do
@@ -154,30 +146,28 @@ Vault credentials do not unlock the event; no Student catalog change is needed.
    done
    ```
 
-6. Re-run bootstrap/verification with the same credential: the Secret UID and
-   key must remain unchanged. Verify destruction skips both credential roles
-   even when the event Vault credential is unavailable.
+6. Re-run bootstrap with the same variable and confirm that the Secret UID and
+   key remain unchanged. An explicitly empty or incorrect variable must fail
+   before event/key mutation. If the variable is absent and no legacy job
+   credential matches, bootstrap must also fail. Check that teardown skips
+   credential bootstrap.
 
-The collection tests cover missing job credentials before API mutation,
-incorrect existing keys, concurrent creation with conflicting keys, instructor
-access rejection, key redaction/cleanup, and lifecycle guards. They also check
-that credential failure makes the aggregate leaderboard health report fail.
+Tests exercise a platform-encrypted include carrying a different organizer key,
+variable precedence, incorrect/empty supplied values, redaction, cleanup,
+concurrent Secret creation, instructor read denial and lifecycle guards.
 
 ## Troubleshooting and rotation
 
-| Symptom | Maintainer check |
+| Symptom | Check |
 | --- | --- |
-| Bootstrap cannot unlock the event | Check the credential attachment, key, Vault identifier and matching policy. A named credential working on one controller does not prove the other controller has it. |
-| Existing key is rejected | Compare the intended event/key versions privately. The role deliberately does not overwrite an inconsistent existing Secret. |
-| Instructor isolation fails | Inspect the SubjectAccessReview and namespace/cluster RBAC. Do not bypass the health gate. |
-| Student cannot find the Secret | Confirm it targets the intended Leaderboard API and that this Leaderboard completed credential bootstrap. |
+| Variable is absent in the workload job | Connect the encrypted include to the Leaderboard workload configuration, not only its base OpenShift component. |
+| Explicit variable cannot unlock the event | Verify the supplied organizer key matches the packaged event. The platform key used to decrypt the include may be different. |
+| Existing Secret is rejected | Investigate the event/key versions privately; bootstrap deliberately refuses implicit rotation. |
+| Instructor authorization succeeds | Inspect namespace and cluster RBAC; retain the failed readiness gate. |
+| Student cannot resolve a key | Check its selected Leaderboard API and that Leaderboard credential bootstrap completed, or its direct include variable if supplied. |
 
-Rotation requires a coordinated update to the packaged event vault, the RHDP
-credential, the stored cluster Secret, and any upstream instructor source vault
-that shares the organizer key. Perform the existing-Secret change explicitly
-through the approved organizer procedure, then re-run credential and student
-health checks. Personal instructor lab passwords are separate credentials.
-
-For older deployments awaiting this integration, the local key-seeding helper
-remains available as a maintenance fallback. Fresh deployments using the
-integrated catalog hook should not depend on it.
+Rotation requires coordinated updates to the encrypted include, packaged event
+vault, protected cluster Secret, and any upstream instructor source vault sharing
+that organizer key. Change an existing Secret only through the approved organizer
+procedure, then re-run credential and Student health checks. Personal instructor
+lab passwords are separate credentials.

@@ -1,11 +1,30 @@
 ---
-- name: Try the RHDP job's existing Ansible Vault credentials
+- name: Unlock with the organizer variable when supplied by the encrypted AgnosticV include
+  when: aia_organizer_vault_password is defined
+  block:
+    - name: Validate the explicitly supplied organizer variable
+      ansible.builtin.assert:
+        that:
+          - aia_organizer_vault_password is string or aia_organizer_vault_password is vault_encrypted
+          - aia_organizer_vault_password | string | trim | length > 0
+
+    - name: Unlock the event with the explicitly supplied organizer key
+      ansible.builtin.set_fact:
+        _aia_event_bundle: >-
+          {{ lookup('ansible_island_adventure.automation.vault_flags',
+                    role_path ~ '/files/flags.vault',
+                    password=(aia_organizer_vault_password | string),
+                    include_source_password=true) }}
+  no_log: true
+
+- name: Try existing job Vault credentials when no organizer variable was supplied
   ansible.builtin.set_fact:
     _aia_event_bundle: >-
       {{ lookup('ansible_island_adventure.automation.vault_flags',
                 role_path ~ '/files/flags.vault',
                 include_source_password=true, errors='ignore') }}
   no_log: true
+  when: aia_organizer_vault_password is not defined
 
 - name: Use the organizer-only key handoff when job credentials do not unlock the event
   when: not (_aia_event_bundle | default({}))
@@ -27,8 +46,9 @@
           - _aia_event_vault_secret.resources[0].data[aia_event_vault_secret_key] is defined
           - _aia_event_vault_secret.resources[0].data[aia_event_vault_secret_key] | b64decode | trim | length > 0
         fail_msg: >-
-          Attach the matching organizer Vault credential, or seed the organizer
-          Secret with --organizer-vault-password-file before ordering student CIs.
+          Supply aia_organizer_vault_password through the approved encrypted
+          AgnosticV include, provision the Leaderboard organizer Secret, or use
+          --organizer-vault-password-file for an older environment.
       no_log: true
 
     - name: Unlock and validate event answers with the protected organizer key

@@ -132,7 +132,7 @@ m.exit_json(changed=False)
         self.secret = self.path / 'secret.json'; self.trace = self.path / 'api.log'
         self.config = self.path / 'ansible.cfg'; self.config.write_text('[defaults]\nstdout_callback=default\n')
 
-    def run_role(self, job_key=True, verify=False, allow=False, action='provision', check=False, catch=False, health=False, allow_verb=''):
+    def run_role(self, job_key=True, verify=False, allow=False, action='provision', check=False, catch=False, health=False, allow_verb='', organizer=..., encrypted_include=False):
         task = {'ansible.builtin.include_role': {'name': 'ansible_island_adventure.automation.leaderboard_event_credentials'}}
         if verify: task['ansible.builtin.include_role']['tasks_from'] = 'verify'
         if health: task['ansible.builtin.include_role']['name'] = 'ansible_island_adventure.automation.leaderboard_health'
@@ -149,17 +149,28 @@ m.exit_json(changed=False)
                           '_aia_leaderboard_event_bundle | default({}) == {}',
                           '_aia_leaderboard_verified_bundle == {}', '_aia_leaderboard_verify_secret == {}']}})
         play = self.path / 'play.yml'
-        play.write_text(yaml.safe_dump([{'hosts':'localhost','connection':'local','gather_facts':False,
+        definition={'hosts':'localhost','connection':'local','gather_facts':False,
             'vars':{'ACTION':action, 'ansible_python_interpreter':sys.executable,
                     'aia_healthcheck_publish_user_info':health,'aia_kubeconfig':'selected-leaderboard',
                     'aia_leaderboard_require_event_credentials':True,
-                    'openshift_cluster_ingress_domain':'apps.example.test','output_dir':str(self.path)},'tasks':tasks}]))
+                    'openshift_cluster_ingress_domain':'apps.example.test','output_dir':str(self.path)},'tasks':tasks}
+        if organizer is not ...:
+            definition['vars']['aia_organizer_vault_password']=organizer
+        if encrypted_include:
+            platform_password=secrets.token_hex(20)
+            platform_key=self.path/'platform-key'; platform_key.write_text(platform_password)
+            ciphertext=VaultLib([('default',VaultSecret(platform_password.encode()))]).encrypt(self.password.encode()).decode()
+            include=self.path/'approved-include.yml'
+            include.write_text('aia_organizer_vault_password: !vault |\n'+''.join('  '+line+'\n' for line in ciphertext.splitlines()))
+            definition['vars_files']=[str(include)]
+        play.write_text(yaml.safe_dump([definition]))
         env = {k:v for k,v in os.environ.items() if not k.startswith('ANSIBLE_VAULT_')}
         env.update(ANSIBLE_CONFIG=str(self.config), ANSIBLE_COLLECTIONS_PATH=str(self.path/'collections'),
                    AIA_SECRET_STATE=str(self.secret), AIA_API_TRACE=str(self.trace), AIA_ALLOW_INSTRUCTOR=str(allow).lower(),
                    AIA_PUBLISHED_DATA=str(self.path/'published.json'), AIA_ALLOW_VERB=allow_verb)
         cmd = [str(PLAYBOOK), '-i', 'localhost,', str(play)]
         if job_key: cmd += ['--vault-id','rhdp-event@'+str(self.key)]
+        if encrypted_include: cmd += ['--vault-password-file',str(platform_key)]
         if check: cmd += ['--check','--diff']
         result = subprocess.run(cmd,env=env,capture_output=True,text=True,timeout=45)
         output = result.stdout+result.stderr
@@ -177,6 +188,20 @@ m.exit_json(changed=False)
     def test_absent_job_credential_fails_before_any_api_call(self):
         code,out=self.run_role(job_key=False,catch=True); self.assertEqual(code,0,out)
         self.assertFalse(self.trace.exists()); self.assertFalse(self.secret.exists())
+
+    def test_organizer_variable_bootstraps_without_an_event_vault_credential(self):
+        code,out=self.run_role(job_key=False,organizer=self.password)
+        self.assertEqual(code,0,out); self.assertTrue(self.secret.exists())
+
+    def test_encrypted_include_uses_platform_key_to_deliver_a_different_event_key(self):
+        code,out=self.run_role(job_key=False,encrypted_include=True)
+        self.assertEqual(code,0,out); self.assertTrue(self.secret.exists())
+
+    def test_invalid_explicit_variable_cannot_fall_back_to_a_valid_job_credential(self):
+        for value in [None,'','incorrect-event-key']:
+            code,out=self.run_role(organizer=value,catch=True)
+            self.assertEqual(code,0,out)
+            self.assertFalse(self.trace.exists()); self.assertFalse(self.secret.exists())
 
     def test_wrong_existing_secret_fails_without_overwriting(self):
         self.secret.write_text(json.dumps({'data':{'password':base64.b64encode(b'other-test-key').decode()}}))

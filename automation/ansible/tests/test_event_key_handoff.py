@@ -70,28 +70,40 @@ m.exit_json(changed=False, resources=json.loads(Path(os.environ['AIA_TEST_SECRET
         self.config = self.path / 'ansible.cfg'
         self.config.write_text('[defaults]\nstdout_callback=default\n')
 
-    def run_play(self, tasks, job_key=False):
+    def run_play(self, tasks, job_key=False, organizer=..., encrypted_include=False):
         play = self.path / 'test.yml'
-        play.write_text(yaml.safe_dump([{'hosts': 'localhost', 'connection': 'local', 'gather_facts': False,
-                                         'vars': {'ansible_python_interpreter': sys.executable}, 'tasks': tasks}]))
+        definition={'hosts': 'localhost', 'connection': 'local', 'gather_facts': False,
+                    'vars': {'ansible_python_interpreter': sys.executable}, 'tasks': tasks}
+        if organizer is not ...:
+            definition['vars']['aia_organizer_vault_password']=organizer
+        if encrypted_include:
+            platform_password=secrets.token_hex(20)
+            platform_key=self.path/'platform-key'; platform_key.write_text(platform_password)
+            ciphertext=VaultLib([('default',VaultSecret(platform_password.encode()))]).encrypt(self.password.encode()).decode()
+            include=self.path/'approved-include.yml'
+            include.write_text('aia_organizer_vault_password: !vault |\n'+''.join('  '+line+'\n' for line in ciphertext.splitlines()))
+            definition['vars_files']=[str(include)]
+        play.write_text(yaml.safe_dump([definition]))
         env = {k: v for k, v in os.environ.items() if not k.startswith('ANSIBLE_VAULT_')}
         env.update(ANSIBLE_CONFIG=str(self.config), ANSIBLE_COLLECTIONS_PATH=str(self.path / 'collections'),
                    AIA_TEST_SECRET=str(self.fixture), AIA_TEST_TRACE=str(self.trace))
         cmd = [str(PLAYBOOK), '-i', 'localhost,', str(play)]
         if job_key:
             cmd += ['--vault-id', 'rhdp-event@' + str(self.key)]
+        if encrypted_include:
+            cmd += ['--vault-password-file',str(platform_key)]
         result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=40)
         output = result.stdout + result.stderr
         self.assertFalse(self.password in output, 'organizer key appeared in output')
         self.assertFalse(base64.b64encode(self.password.encode()).decode() in output, 'encoded key appeared in output')
         return result.returncode, output
 
-    def unlock(self, job_key=False):
+    def unlock(self, job_key=False, **kwargs):
         return self.run_play([
             {'ansible.builtin.include_role': {'name': 'ansible_island_adventure.automation.instructor_config'}},
             {'ansible.builtin.assert': {'that': ["_aia_event_bundle.ctfd_flags.answer == 'synthetic-event-answer'",
                                                 "_aia_event_bundle.source_password | length > 0"]}, 'no_log': True},
-        ], job_key)
+        ], job_key, **kwargs)
 
     def test_existing_job_credential_avoids_secret_api(self):
         code, output = self.unlock(job_key=True)
@@ -102,6 +114,19 @@ m.exit_json(changed=False, resources=json.loads(Path(os.environ['AIA_TEST_SECRET
         code, output = self.unlock()
         self.assertEqual(code, 0, output)
         self.assertTrue(self.trace.exists())
+
+    def test_organizer_variable_avoids_the_secret_api(self):
+        code,output=self.unlock(organizer=self.password)
+        self.assertEqual(code,0,output); self.assertFalse(self.trace.exists())
+
+    def test_platform_encrypted_include_unlocks_the_event_without_its_job_credential(self):
+        code,output=self.unlock(encrypted_include=True)
+        self.assertEqual(code,0,output); self.assertFalse(self.trace.exists())
+
+    def test_invalid_explicit_variable_uses_neither_valid_job_key_nor_secret(self):
+        for value in [None,'','incorrect-event-key']:
+            code,_=self.unlock(job_key=True,organizer=value)
+            self.assertNotEqual(code,0); self.assertFalse(self.trace.exists())
 
     def test_missing_or_wrong_secret_never_provisions_with_unresolved_flags(self):
         for resources in [[], [{'data': {'password': base64.b64encode(b'wrong-key').decode()}}]]:

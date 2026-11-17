@@ -12,11 +12,22 @@
           - aia_kubeconfig | trim | length > 0
       when: aia_kubeconfig is defined
 
-    - name: Require the job Vault credential to unlock the packaged event before any mutation
+    - name: Validate the organizer variable when supplied by the encrypted AgnosticV include
+      ansible.builtin.assert:
+        that:
+          - aia_organizer_vault_password is string or aia_organizer_vault_password is vault_encrypted
+          - aia_organizer_vault_password | string | trim | length > 0
+      when: aia_organizer_vault_password is defined
+
+    - name: Unlock the packaged event before any mutation
       ansible.builtin.set_fact:
         _aia_leaderboard_event_bundle: >-
           {{ lookup('ansible_island_adventure.automation.vault_flags',
                     role_path ~ '/../student_post_provision/files/flags.vault',
+                    password=(
+                      (aia_organizer_vault_password | string)
+                      if aia_organizer_vault_password is defined else none
+                    ),
                     include_source_password=true) }}
 
     - name: Read the existing organizer Secret
@@ -68,9 +79,10 @@
     - name: Explain the protected credential bootstrap failure
       ansible.builtin.fail:
         msg: >-
-          Organizer credential bootstrap failed. Attach the matching AIA event Vault
-          credential to the leaderboard deployer; check API access and any existing
-          organizer Secret. A different existing key must be investigated explicitly.
+          Organizer credential bootstrap failed. Supply aia_organizer_vault_password
+          through the approved encrypted AgnosticV include; check that it unlocks
+          the packaged event, API access and any existing organizer Secret.
+          A different existing key must be investigated explicitly.
   always:
     - name: Clear the source key and answers on success and failure
       ansible.builtin.set_fact:
