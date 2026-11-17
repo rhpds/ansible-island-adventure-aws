@@ -8,7 +8,8 @@ from ansible.module_utils.basic import AnsibleModule
 import requests
 
 
-def evaluate(snapshots, domain, minimum_workers=3, rwx_class='ocs-storagecluster-cephfs', http=None):
+def evaluate(snapshots, domain, minimum_workers=3, rwx_class='ocs-storagecluster-cephfs', http=None,
+             event_credentials_status=None):
     objects = {r['item']['key']: r.get('resources', []) for r in snapshots}
     report = {'id': uuid.uuid4().hex, 'started': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'checks': {}}
 
@@ -62,6 +63,9 @@ def evaluate(snapshots, domain, minimum_workers=3, rwx_class='ocs-storagecluster
             status = resource.get('status', {})
             require(status.get('readyReplicas', 0) >= wanted and status.get('observedGeneration') == resource['metadata']['generation'], 'Workload is not ready: ' + namespace + '/' + resource['metadata']['name'])
 
+    if event_credentials_status is not None:
+        check('event_credentials', lambda: require(event_credentials_status == 'passed',
+              'Organizer key is missing, invalid or accessible to an instructor probe'))
     check('worker_nodes', workers)
     check('odf_cephfs', storage)
     check('aap_rwx_claim', hub_storage)
@@ -88,12 +92,14 @@ def main():
     module = AnsibleModule(argument_spec={'snapshots': {'type': 'list', 'elements': 'dict', 'required': True},
                                          'domain': {'type': 'str', 'required': True},
                                          'minimum_workers': {'type': 'int', 'default': 3},
-                                         'rwx_class': {'type': 'str', 'default': 'ocs-storagecluster-cephfs'}}, supports_check_mode=True)
+                                         'rwx_class': {'type': 'str', 'default': 'ocs-storagecluster-cephfs'},
+                                         'event_credentials_status': {'type': 'str'}}, supports_check_mode=True)
     if module.check_mode:
         module.exit_json(changed=False, skipped=True, msg='Check mode does not establish leaderboard health')
     try:
         p = module.params
-        module.exit_json(changed=False, report=evaluate(p['snapshots'], p['domain'], p['minimum_workers'], p['rwx_class']))
+        module.exit_json(changed=False, report=evaluate(p['snapshots'], p['domain'], p['minimum_workers'], p['rwx_class'],
+                                                      event_credentials_status=p['event_credentials_status']))
     except Exception:
         module.fail_json(msg='Leaderboard health evaluation failed; response contents suppressed')
 

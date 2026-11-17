@@ -1,0 +1,60 @@
+---
+- name: Mark organizer credentials unverified before reading them
+  ansible.builtin.set_fact:
+    aia_event_credentials_status: failed
+
+- name: Verify organizer credentials without changing the key or event content
+  block:
+    - name: Require an explicit nonempty kubeconfig when supplied
+      ansible.builtin.assert:
+        that:
+          - aia_kubeconfig is string
+          - aia_kubeconfig | trim | length > 0
+      when: aia_kubeconfig is defined
+
+    - name: Read the stored organizer key from the selected leaderboard
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ aia_kubeconfig | default(omit) }}"
+        api_version: v1
+        kind: Secret
+        namespace: "{{ aia_event_vault_secret_namespace }}"
+        name: "{{ aia_event_vault_secret_name }}"
+      register: _aia_leaderboard_verify_secret
+
+    - name: Require exactly one nonempty organizer key
+      ansible.builtin.assert:
+        that:
+          - _aia_leaderboard_verify_secret.resources | length == 1
+          - _aia_leaderboard_verify_secret.resources[0].data[aia_event_vault_secret_key] | b64decode | trim | length > 0
+
+    - name: Validate the stored key against the packaged encrypted event
+      ansible.builtin.set_fact:
+        _aia_leaderboard_verified_bundle: >-
+          {{ lookup('ansible_island_adventure.automation.vault_flags',
+                    role_path ~ '/../student_post_provision/files/flags.vault',
+                    password=(
+                      _aia_leaderboard_verify_secret.resources[0].data[aia_event_vault_secret_key] | b64decode
+                    )) }}
+
+    - name: Verify instructor isolation
+      ansible.builtin.include_tasks: isolation.yml
+
+    - name: Mark cryptographic and instructor-isolation checks passed
+      ansible.builtin.set_fact:
+        aia_event_credentials_status: passed
+
+  always:
+    - name: Clear stored key and decrypted event data after every verification
+      ansible.builtin.set_fact:
+        _aia_leaderboard_verify_secret: {}
+        _aia_leaderboard_verified_bundle: {}
+        _aia_leaderboard_access_reviews: {}
+  no_log: true
+  diff: false
+
+- name: Publish only measured organizer credential readiness
+  agnosticd.core.agnosticd_user_info:
+    msg: 'Organizer event credentials: ready; instructor access denied.'
+    data:
+      aia_event_credentials_status: "{{ aia_event_credentials_status }}"
+  when: aia_healthcheck_publish_user_info | bool

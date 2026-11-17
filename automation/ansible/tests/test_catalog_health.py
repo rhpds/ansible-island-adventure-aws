@@ -94,6 +94,14 @@ class LeaderboardHealthTests(unittest.TestCase):
         result = self.evaluate(); self.assertEqual(result['status'], 'passed'); self.assertEqual(len(result['checks']), 14)
         self.assertEqual(self.http.get.call_count, 4)
 
+    def test_required_event_credentials_add_a_measured_fifteenth_gate(self):
+        for status in ['failed', 'passed', 'unverified']:
+            result = health.evaluate(self.data, 'apps.example.test', http=self.http,
+                                     event_credentials_status=status)
+            self.assertEqual(len(result['checks']), 15)
+            self.assertEqual(result['status'], 'passed' if status == 'passed' else 'failed')
+            self.assertEqual(result['checks']['aap_reconciliation']['status'], 'passed')
+
     def test_ceph_warning_fails_storage_but_other_checks_continue(self):
         self.get('cephclusters')[0]['status']['ceph']['health'] = 'HEALTH_WARN'
         result = self.evaluate(); self.assertEqual(result['checks']['odf_cephfs']['status'], 'failed')

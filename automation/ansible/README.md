@@ -14,6 +14,7 @@ Catalog workload roles live in this directory:
 - `roles/student_readiness/` — Catalog adapter for managed-node AAP access and connectivity validation
 - `roles/student_post_provision/` — Packaged event content, personal vault re-keying, repository access guide and AAP managed-node configuration
 - `roles/student_health/` — Final student CI gate for actual content, logins, vault usability and runtime paths
+- `roles/leaderboard_event_credentials/` — Create-only organizer key handoff from `aia_organizer_vault_password` in RHDP's encrypted include, with cryptographic and instructor-isolation verification
 - `roles/leaderboard_health/` — Final shared AWS cluster, storage, workload and HTTPS gate
 
 The project root also retains `ansible-testing/` playbooks and the
@@ -113,12 +114,14 @@ existing challenge IDs and scores.
 The collection packages its canonical challenge definitions under
 `roles/student_post_provision/vars/challenges.yml` and encrypted answers under
 `roles/student_post_provision/files/flags.vault`. The historical `ansible-testing`
-paths below are compatibility symlinks. The native catalog lookup uses the
-matching existing Ansible Vault credential attached to the RHDP job. Neither the
-key nor decrypted answers are published in user data, and transient answer/key
-facts are cleared before inventory export. Supply the organizer's Vault
-credential through the RHDP job or local `--vault-password-file`; do not place
-the key in committed catalog defaults.
+paths below are compatibility symlinks. Native provisioning consumes
+`aia_organizer_vault_password` from RHDP's approved encrypted AgnosticV include.
+The Leaderboard seeds the protected Secret handoff for Student jobs; Students
+can also consume the variable directly. Existing job Vault credentials and local
+`--vault-password-file` remain maintenance options when the variable is absent.
+Neither the key nor decrypted answers are published in user data, and derived
+answer/key facts are cleared before inventory export. Do not put the key in
+plaintext catalog defaults or published inventory/user data.
 
 For a retained existing student, a maintenance play can include
 `ansible_island_adventure.automation.instructor_config` with
@@ -313,8 +316,11 @@ The instructor answer vault in each Gitea fork is re-keyed in memory with
 that key and returns existing ciphertext unchanged when it already works. On
 initial setup it uses `aia_instructor_vault_source_password`, defaulting to a
 private file selected by `aia_instructor_vault_password_file` (repository-root
-`.vault-password`). Native student CIs try their Vault credentials, then the
-organizer-only `aia-automation/aia-event-vault` Secret. The deployment utility's
+`.vault-password`). Native provisioning first uses `aia_organizer_vault_password`
+when RHDP's encrypted AgnosticV include supplies it. An explicit invalid value
+fails without falling back. When absent, native student CIs try existing job
+Vault credentials, then the organizer-only `aia-automation/aia-event-vault` Secret.
+The deployment utility's
 `--organizer-vault-password-file` option seeds that Secret before student ordering;
 see [the AWS workflow](../../AWS.md#student-ci-health-check). Only the existing file's ciphertext is committed,
 with its Git SHA as a concurrency guard; student edits/answers are retained.

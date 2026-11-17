@@ -1,0 +1,12 @@
+---
+# openshift-workloads invokes workloads in reverse during destruction, too.
+- name: Provision organizer credentials only during real provisioning
+  ansible.builtin.include_tasks: bootstrap.yml
+  when:
+    - ACTION | default('provision') == 'provision'
+    - not ansible_check_mode
+
+- name: State that check mode does not establish credential readiness
+  ansible.builtin.debug:
+    msg: 'Organizer credentials: SKIPPED (check mode).'
+  when: ansible_check_mode

@@ -56,6 +56,13 @@ The original CNV repository and workflow are not modified or re-registered.
 
 ## Student CI health check
 
+For automatic organizer-key provisioning on future Leaderboards, see the
+[RHDP maintainer setup guide](docs/rhdp-event-credentials.md). It documents the
+`aia_organizer_vault_password` variable supplied by RHDP's approved encrypted
+AgnosticV configuration, catalog hook, readiness gate and UI-only acceptance
+checks. The catalog PR includes the maintainer-provided encrypted scalar under
+Vault identity `gpte_vault_0`.
+
 The corresponding AWS catalog update enables `instructor_config_post_provision`. After initial
 account/service bootstrap, `student_post_provision` prepares the personal AAP
 inventory and Machine credential, verifies repository branches, re-keys the
@@ -69,8 +76,10 @@ same encrypted event data used by the CNV post-deploy playbook. The CNV workflow
 ran that playbook locally with `--vault-password-file ../../.vault-password`.
 Moving the tasks into a CI also requires delivering that key to the deployer.
 
-The student role first tries the job's Ansible Vault credentials. When those do
-not unlock the event, it reads Secret `aia-automation/aia-event-vault`, key
+The student role first uses `aia_organizer_vault_password` when supplied directly
+by the encrypted include. An invalid explicit value fails provisioning. When
+the variable is absent, it tries existing job Vault credentials, then reads
+Secret `aia-automation/aia-event-vault`, key
 `password`, on the leaderboard. That namespace has no instructor RoleBindings;
 instructors retain admin access only to their own lab and CTFd namespaces. The
 organizer key is cleared from working facts on success and failure. The role
@@ -94,7 +103,8 @@ overwritten. To deploy a fresh AWS environment with a serial canary rollout:
 Use `new-student --leaderboard-file lb-creds.yaml` with the same AWS catalog and
 key-file options to reuse a started leaderboard. The key handoff happens before
 any student order. For direct RHDP UI ordering, an organizer must first seed the
-same protected Secret or arrange the matching RHDP Vault credential. The student
+same protected Secret or enable the maintainer's encrypted include and native
+Leaderboard bootstrap. The student
 CI completes post-provision configuration without a manual post-deploy run.
 Local maintenance playbooks can still use `--vault-password-file`.
 
@@ -103,9 +113,9 @@ failures. It preserves challenge IDs and scores; a persistent failure still
 blocks successful provisioning. Unexpected failures report their exception
 class without including response contents or answers.
 
-Babylon's runner also forwards `governor.spec.vars.vault_credentials` to the Tower
-job's Vault credentials in
-[`resolveVaultCredentials`](https://github.com/rhpds/babylon-runner/blob/4b9e815e7ed0a3f51e278859b0a86b157987f95d/internal/handler/tower_launch.go#L445).
+No new Vault credential on the event controllers is required. RHDP's existing
+secret-management mechanism decrypts the include in the deployer, and the
+automation consumes `aia_organizer_vault_password` in memory.
 
 ### Provisioning gates and the image's health checks
 

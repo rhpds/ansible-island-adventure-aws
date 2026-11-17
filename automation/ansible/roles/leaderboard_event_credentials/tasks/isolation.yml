@@ -1,0 +1,48 @@
+---
+- name: Require instructor isolation before handling the stored key
+  block:
+    - name: Measure instructor access to the organizer Secret using authorization reviews
+      kubernetes.core.k8s:
+        kubeconfig: "{{ aia_kubeconfig | default(omit) }}"
+        state: present
+        definition:
+          apiVersion: authorization.k8s.io/v1
+          kind: SubjectAccessReview
+          spec:
+            user: "{{ item.0 }}"
+            groups: "{{ aia_event_vault_probe_groups }}"
+            resourceAttributes: >-
+              {{ {
+                'namespace': aia_event_vault_secret_namespace,
+                'verb': item.1.verb, 'group': '', 'resource': 'secrets'
+              } | combine({'name': aia_event_vault_secret_name} if item.1.named else {}) }}
+      # Check list/watch both with and without a resource name: RBAC can grant
+      # a named list/watch when the request includes a metadata.name selector.
+      loop: >-
+        {{ aia_event_vault_probe_users | product([
+          {'verb': 'get', 'named': true},
+          {'verb': 'list', 'named': false}, {'verb': 'list', 'named': true},
+          {'verb': 'watch', 'named': false}, {'verb': 'watch', 'named': true}
+        ]) | list }}
+      register: _aia_leaderboard_access_reviews
+      changed_when: false
+
+    - name: Require real denials for every instructor probe
+      ansible.builtin.assert:
+        that:
+          - aia_event_vault_probe_users | length > 0
+          - _aia_leaderboard_access_reviews.results | length == (aia_event_vault_probe_users | length) * 5
+          - >-
+            _aia_leaderboard_access_reviews.results | map(attribute='result.status.allowed') |
+            select('equalto', false) | list | length == (aia_event_vault_probe_users | length) * 5
+          - >-
+            _aia_leaderboard_access_reviews.results |
+            map(attribute='result.status.evaluationError', default='') |
+            reject('equalto', '') | list | length == 0
+
+  always:
+    - name: Clear authorization review results
+      ansible.builtin.set_fact:
+        _aia_leaderboard_access_reviews: {}
+  no_log: true
+  diff: false
