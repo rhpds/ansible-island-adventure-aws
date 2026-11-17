@@ -1,23 +1,24 @@
-# RHDP encrypted include for AIA organizer credentials
+# RHDP encrypted configuration for AIA organizer credentials
 
 Review links: [AIA implementation PR](https://github.com/rhpds/ansible-island-adventure-aws/pull/1)
 and [AgnosticV catalog PR](https://github.com/rhpds/agnosticv/pull/29067).
-The catalog PR remains a draft until maintainers wire the approved encrypted
-include into the Leaderboard workload configuration.
+The catalog PR contains the maintainer-provided encrypted variable directly in
+the Leaderboard configuration, using Vault identity `gpte_vault_0`. Fresh RHDP
+UI deployment remains the acceptance test after implementation and catalog review.
 
-## Variable requested from maintainers
+## Variable contract
 
-Please store the organizer event key under this exact Ansible variable name:
+The maintainer-provided organizer event key uses this exact Ansible variable name:
 
 ```text
 aia_organizer_vault_password
 ```
 
-Use RHDP's existing approved encrypted AgnosticV include mechanism. The value
+Use RHDP's existing approved AgnosticV secret-management mechanism. The value
 is the organizer key matching `roles/student_post_provision/files/flags.vault`,
 which is the same source key used by the organizer's local `.vault-password`.
-It is separate from the RHDP platform key used to decrypt the include and from
-each instructor's provisioned lab password.
+It is separate from the RHDP platform key used to decrypt the encrypted value
+and from each instructor's provisioned lab password.
 
 Make the variable available to the **AWS Leaderboard workload deployer job**.
 Defining it there is sufficient: the Leaderboard role provisions the existing
@@ -25,22 +26,24 @@ protected Secret handoff that Student jobs already consume. Supplying the same
 variable directly to Student jobs is also supported when maintainers choose to
 include it there.
 
-The encrypted include path and encryption procedure belong to RHDP maintainers.
-Use an event-scoped include in the approved directory; the public catalog change does not invent a
-new secret file or commit an unencrypted placeholder. The catalog PR must remain
-a draft until the selected include actually supplies this variable to the job.
+The current catalog stores the exact maintainer-supplied `!vault` scalar under
+this variable in `rh1-2027/lb1663-rh1-ans-island-leaderboard-aws/common.yaml`,
+including its ownership and rotation metadata. Its header is
+`$ANSIBLE_VAULT;1.2;AES256;gpte_vault_0`. RHDP decrypts it in the deployer with its
+existing approved credentials. A separate encrypted include is also supported
+if maintainers choose that location later.
 
 ## Changes and ownership
 
 | Owner | Action |
 | --- | --- |
-| RHDP maintainer | Store `aia_organizer_vault_password` in the approved encrypted include and include it in the AWS Leaderboard workload configuration. Keep it encrypted through catalog rendering and decrypt only within the deployer using the existing mechanism. |
+| RHDP maintainer | Supply `aia_organizer_vault_password` using the approved encrypted scalar or include in the AWS Leaderboard workload configuration. Keep it encrypted through catalog rendering and decrypt only within the deployer using the existing mechanism. |
 | AIA repository maintainers | Ship the variable-aware bootstrap and Student unlock paths, create-only Secret handling, and readiness checks. |
-| AgnosticV maintainer | Review the pinned collection revision and workload ordering, confirm the private include is connected, then enable the catalog PR. |
+| AgnosticV maintainer | Review the pinned collection revision and workload ordering, confirm the encrypted variable reaches the workload job, then enable the catalog PR. |
 
 No new named credential on the event controllers is required. Existing RHDP
-platform credentials decrypt the approved include through the platform's normal
-mechanism.
+platform credentials decrypt the approved encrypted value through the platform's
+normal mechanism.
 
 Do not expose the variable through catalog parameters, form defaults, plaintext
 public configuration, `agnosticd_user_info`, published user data, Showroom,
@@ -70,7 +73,7 @@ The existing Student role resolves its key in this order:
 
 Legacy local maintenance can still use its existing Vault password file or the
 local Secret-seeding helper. Those are not required for fresh deployments once
-the maintainer include and catalog hook are enabled.
+the encrypted variable and catalog hook are enabled.
 
 All key-bearing tasks suppress logs and diffs. Derived decrypted answers and
 key facts are cleared on success and failure. The input variable remains owned
@@ -81,8 +84,8 @@ data. Instructors continue using their individual lab passwords.
 
 The catalog PR updates the AWS Leaderboard and Student collection revisions in
 `rh1-2027/lb1663-rh1-ans-island-{leaderboard,student}-aws/common.yaml` in
-`rhpds/agnosticv`. Maintainers must connect their selected encrypted include to
-the Leaderboard workload job. The Leaderboard hook enables:
+`rhpds/agnosticv`. The maintainer-provided encrypted scalar is defined in the
+Leaderboard configuration. The Leaderboard hook enables:
 
 ```yaml
 aia_leaderboard_require_event_credentials: true
@@ -117,10 +120,10 @@ Only measured status (`aia_event_credentials_status: passed` or `failed`) is
 published alongside aggregate health. Bootstrap skips destruction and check
 mode; stop/start does not rotate the key.
 
-1. Confirm the include uses the existing approved encryption mechanism and its
-   variable reaches the Leaderboard workload job. Keep the organizer key
-   encrypted in stored catalog configuration; do not materialize it as a public
-   parameter to test delivery.
+1. Confirm the maintainer-provided encrypted variable reaches the Leaderboard
+   workload job and the existing `gpte_vault_0` platform credential can decrypt
+   it. Keep the organizer key encrypted in stored catalog configuration; do not
+   materialize it as a public parameter to test delivery.
 2. Order a fresh AWS Leaderboard through RHDP's ordinary UI. Do not seed a Secret
    manually or use `--organizer-vault-password-file`.
 3. Require native success, `aia_event_credentials_status: passed`, and
@@ -160,13 +163,13 @@ concurrent Secret creation, instructor read denial and lifecycle guards.
 
 | Symptom | Check |
 | --- | --- |
-| Variable is absent in the workload job | Connect the encrypted include to the Leaderboard workload configuration, not only its base OpenShift component. |
+| Variable is absent in the workload job | Confirm the encrypted scalar or include is defined for the Leaderboard workload configuration, not only its base OpenShift component. |
 | Explicit variable cannot unlock the event | Verify the supplied organizer key matches the packaged event. The platform key used to decrypt the include may be different. |
 | Existing Secret is rejected | Investigate the event/key versions privately; bootstrap deliberately refuses implicit rotation. |
 | Instructor authorization succeeds | Inspect namespace and cluster RBAC; retain the failed readiness gate. |
 | Student cannot resolve a key | Check its selected Leaderboard API and that Leaderboard credential bootstrap completed, or its direct include variable if supplied. |
 
-Rotation requires coordinated updates to the encrypted include, packaged event
+Rotation requires coordinated updates to the encrypted scalar or include, packaged event
 vault, protected cluster Secret, and any upstream instructor source vault sharing
 that organizer key. Change an existing Secret only through the approved organizer
 procedure, then re-run credential and Student health checks. Personal instructor

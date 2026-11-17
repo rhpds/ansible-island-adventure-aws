@@ -59,8 +59,9 @@ The original CNV repository and workflow are not modified or re-registered.
 For automatic organizer-key provisioning on future Leaderboards, see the
 [RHDP maintainer setup guide](docs/rhdp-event-credentials.md). It documents the
 `aia_organizer_vault_password` variable supplied by RHDP's approved encrypted
-AgnosticV include, catalog hook, readiness gate and UI-only acceptance checks.
-Maintainers must connect that include before enabling the catalog integration.
+AgnosticV configuration, catalog hook, readiness gate and UI-only acceptance
+checks. The catalog PR includes the maintainer-provided encrypted scalar under
+Vault identity `gpte_vault_0`.
 
 The corresponding AWS catalog update enables `instructor_config_post_provision`. After initial
 account/service bootstrap, `student_post_provision` prepares the personal AAP
