@@ -58,7 +58,7 @@
     argv:
       - "{{ (_oc_check.stdout | trim) if _oc_check.rc == 0 else '/usr/local/bin/oc' }}"
       - login
-      - "{{ ocp_api_url }}"
+      - "{{ ocp_api_url | trim }}"
       - "--username={{ ocp_admin_user }}"
       - "--password={{ ocp_admin_password }}"
       - --insecure-skip-tls-verify=true
